@@ -28,7 +28,7 @@ const ComponentPalette = () => {
 
             {components.map((comp) => (
                 <div
-                    key={comp.type}
+                    key={comp.label}
                     className="bg-slate-800 p-3 rounded-lg shadow-sm border border-slate-700 cursor-move hover:shadow-lg hover:shadow-blue-900/20 hover:border-blue-500/50 hover:bg-slate-750 transition-all flex items-center gap-3 group"
                     onDragStart={(event) => onDragStart(event, comp.type, comp.label)}
                     draggable
