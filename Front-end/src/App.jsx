@@ -5,6 +5,7 @@ import Login from "./components/auth/Login";
 import Register from "./components/auth/Register";
 import ExperimentPage from "./pages/ExperimentPage";
 import FreeSimulator from "./pages/FreeSimulator";
+import ShareCircuit from "./pages/ShareCircuit";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import Navbar from "./components/common/Navbar";
 import AdminDashboard from './components/dashboard/AdminDashboard';
@@ -33,6 +34,9 @@ function App() {
               <FreeSimulator />
             </ProtectedRoute>
           } />
+
+          {/* Public read-only shared circuit */}
+          <Route path="/share/circuit/:shareId" element={<ShareCircuit />} />
 
           <Route path="/teacher-dashboard" element={
             <ProtectedRoute role="teacher">

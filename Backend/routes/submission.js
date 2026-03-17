@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const { protect, teacherOnly, adminOrTeacher } = require('../middleware/authMiddleware.js');
 const Submission = require('../models/Submission.js');
+const Classroom = require('../models/Classroom.js');
+const { computeCircuitMetrics, gradeCircuit } = require('../utils/circuitMetrics.js');
 
 // ... (previous routes)
 
@@ -9,28 +11,98 @@ const Submission = require('../models/Submission.js');
 // @route   POST /api/submissions
 // @access  Student only
 router.post('/', protect, async (req, res) => {
-    const { experimentTitle, circuitData, quizScore } = req.body;
+    const { classroomId, experimentTitle, circuitData, quizScore } = req.body;
+    if (!classroomId && !experimentTitle) {
+        return res.status(400).json({ message: 'classroomId is required' });
+    }
 
     try {
+        let classroom = null;
+        if (classroomId) {
+            classroom = await Classroom.findById(classroomId);
+            if (!classroom) return res.status(404).json({ message: 'Classroom not found' });
+        }
+
+        const hasCircuitPayload = circuitData !== undefined && circuitData !== null;
+        const hasQuizPayload = quizScore !== undefined;
+        const shouldRegrade = hasCircuitPayload || hasQuizPayload;
+
         let submission = await Submission.findOne({
             student: req.user._id,
-            experimentTitle
+            ...(classroomId ? { classroom: classroomId } : { experimentTitle })
         });
 
         if (submission) {
-            // Update existing
-            if (circuitData) submission.circuitData = circuitData;
-            if (quizScore !== undefined) submission.quizScore = quizScore;
+            const willUpdateCircuit = circuitData !== undefined && circuitData !== null;
+            const willUpdateQuiz = quizScore !== undefined;
+
+            // Attempt limit: count a new attempt only when resubmitting a field that already exists
+            let isAttempt = false;
+            if (willUpdateCircuit) {
+                isAttempt = isAttempt || submission.circuitData != null;
+                submission.circuitData = circuitData;
+            }
+            if (willUpdateQuiz) {
+                isAttempt = isAttempt || submission.quizScore != null;
+                submission.quizScore = quizScore;
+            }
+
+            if (!submission.classroom && classroomId) submission.classroom = classroomId;
+            if (!submission.experimentTitle) submission.experimentTitle = experimentTitle || classroom?.name || submission.experimentTitle;
+
+            if (isAttempt) {
+                const nextAttempts = (submission.attemptsUsed || 0) + 1;
+                const limit = classroom?.attemptLimit ?? null;
+                if (limit != null && nextAttempts > limit) {
+                    return res.status(400).json({ message: `Attempt limit reached (${limit})` });
+                }
+                submission.attemptsUsed = nextAttempts;
+                submission.lastAttemptAt = new Date();
+            } else if (!submission.attemptsUsed) {
+                // First submit counts as 1 attempt (if any meaningful data is provided)
+                if (willUpdateCircuit || willUpdateQuiz) {
+                    submission.attemptsUsed = 1;
+                    submission.lastAttemptAt = new Date();
+                }
+            }
+
+            if (shouldRegrade && submission.circuitData) {
+                const metrics = computeCircuitMetrics(submission.circuitData);
+                const { simulationScore, scoreBreakdown } = gradeCircuit({
+                    metrics,
+                    rubric: classroom?.gradingRubric || null,
+                });
+                submission.metricsSnapshot = metrics;
+                submission.simulationScore = simulationScore;
+                submission.scoreBreakdown = scoreBreakdown;
+            }
+
             await submission.save();
             return res.json(submission);
+        }
+
+        let metricsSnapshot = null;
+        let simulationScore = null;
+        let scoreBreakdown = null;
+        if (hasCircuitPayload) {
+            metricsSnapshot = computeCircuitMetrics(circuitData);
+            const gradeResult = gradeCircuit({ metrics: metricsSnapshot, rubric: classroom?.gradingRubric || null });
+            simulationScore = gradeResult.simulationScore;
+            scoreBreakdown = gradeResult.scoreBreakdown;
         }
 
         // Create new
         submission = await Submission.create({
             student: req.user._id,
-            experimentTitle,
+            classroom: classroomId || undefined,
+            experimentTitle: experimentTitle || classroom?.name || 'Untitled experiment',
             circuitData: circuitData || {},
-            quizScore: quizScore !== undefined ? quizScore : null
+            quizScore: quizScore !== undefined ? quizScore : null,
+            attemptsUsed: (circuitData || quizScore !== undefined) ? 1 : 0,
+            lastAttemptAt: (circuitData || quizScore !== undefined) ? new Date() : null,
+            metricsSnapshot,
+            simulationScore,
+            scoreBreakdown,
         });
 
         res.status(201).json(submission);
@@ -67,10 +139,12 @@ router.get('/student/:studentId', protect, teacherOnly, async (req, res) => {
 // @route   GET /api/submissions
 // @access  Teacher or Admin
 router.get('/', protect, adminOrTeacher, async (req, res) => {
-    const { experimentTitle } = req.query;
+    const { experimentTitle, classroomId } = req.query;
     try {
         let query = {};
-        if (experimentTitle) {
+        if (classroomId) {
+            query.classroom = classroomId;
+        } else if (experimentTitle) {
             query.experimentTitle = experimentTitle;
         }
         const submissions = await Submission.find(query).populate('student', 'name email').sort({ createdAt: -1 });

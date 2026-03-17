@@ -1,5 +1,6 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
-import axios from 'axios';
+import toast from 'react-hot-toast';
+import { api } from '../api/client';
 
 const AuthContext = createContext();
 
@@ -25,19 +26,22 @@ export const AuthProvider = ({ children }) => {
                 },
             };
 
-            const { data } = await axios.post(
-                'http://localhost:5000/api/auth/login',
+            const { data } = await api.post(
+                '/api/auth/login',
                 { email, password },
                 config
             );
 
             localStorage.setItem('userInfo', JSON.stringify(data));
             setUser(data);
+            toast.success('Logged in');
             return data;
         } catch (error) {
-            throw error.response && error.response.data.message
+            const msg = error.response && error.response.data.message
                 ? error.response.data.message
                 : error.message;
+            toast.error(msg);
+            throw msg;
         }
     };
 
@@ -49,25 +53,29 @@ export const AuthProvider = ({ children }) => {
                 },
             };
 
-            const { data } = await axios.post(
-                'http://localhost:5000/api/auth/register',
+            const { data } = await api.post(
+                '/api/auth/register',
                 { name, email, password, role },
                 config
             );
 
             localStorage.setItem('userInfo', JSON.stringify(data));
             setUser(data);
+            toast.success('Account created');
             return data;
         } catch (error) {
-            throw error.response && error.response.data.message
+            const msg = error.response && error.response.data.message
                 ? error.response.data.message
                 : error.message;
+            toast.error(msg);
+            throw msg;
         }
     };
 
     const logout = () => {
         localStorage.removeItem('userInfo');
         setUser(null);
+        toast('Logged out');
     };
 
     return (

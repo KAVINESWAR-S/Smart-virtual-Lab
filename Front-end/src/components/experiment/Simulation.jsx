@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import Simulator from "./Simulator/Simulator";
 import { useAuth } from "../../context/AuthContext";
-import axios from 'axios';
+import toast from 'react-hot-toast';
+import { api, authHeaders } from '../../api/client';
 
 const Simulation = ({ experiment }) => {
     const { user } = useAuth();
     const [submission, setSubmission] = useState(null);
-    const [loading, setLoading] = useState(false);
 
     useEffect(() => {
         if (user && user.role === 'student' && experiment) {
@@ -17,15 +17,18 @@ const Simulation = ({ experiment }) => {
     const checkSubmission = async () => {
         try {
             const config = {
-                headers: { Authorization: `Bearer ${user.token}` },
+                headers: authHeaders(user.token),
             };
             // Ideally we search by experiment ID or title. 
             // For now, fetching all and filtering (inefficient but works for MVP)
             // Or better, add a query param to the API. 
             // Let's assume the backend 'my' submissions returns everything and we filter here.
 
-            const { data } = await axios.get('http://localhost:5000/api/submissions/my', config);
-            const existing = data.find(sub => sub.experimentTitle === experiment.title);
+            const { data } = await api.get('/api/submissions/my', config);
+            const existing = data.find(sub =>
+                (sub.classroom?._id === experiment.id || sub.classroom === experiment.id) ||
+                sub.experimentTitle === experiment.title
+            );
             if (existing) {
                 setSubmission(existing);
             }
@@ -47,28 +50,26 @@ const Simulation = ({ experiment }) => {
         // window.confirm removed to allow auto-submission from timer without blocking.
         // The user knows they are submitting.
 
-        setLoading(true);
         try {
             const config = {
                 headers: {
                     'Content-Type': 'application/json',
-                    Authorization: `Bearer ${user.token}`
+                    ...authHeaders(user.token)
                 },
             };
 
             const payload = {
+                classroomId: experiment.id,
                 experimentTitle: experiment.title,
                 circuitData: circuitData
             };
 
-            const { data } = await axios.post('http://localhost:5000/api/submissions', payload, config);
+            const { data } = await api.post('/api/submissions', payload, config);
             setSubmission(data);
-            alert("Experiment submitted successfully!");
+            toast.success('Submitted');
         } catch (error) {
             console.error(error);
-            alert("Failed to submit experiment.");
-        } finally {
-            setLoading(false);
+            toast.error(error.response?.data?.message || 'Failed to submit');
         }
     };
 

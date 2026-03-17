@@ -1,8 +1,9 @@
-import { useState, useEffect } from "react";
-import axios from 'axios';
+import { useState } from "react";
+import toast from 'react-hot-toast';
+import { api, authHeaders } from '../../api/client';
 import { useAuth } from "../../context/AuthContext";
 
-const Quiz = ({ questions, experimentTitle }) => {
+const Quiz = ({ questions, experimentTitle, classroomId }) => {
     // const { id } = useParams(); // Removed
     // const experiment = experimentsData[id]; // Removed
     const { user } = useAuth();
@@ -34,24 +35,25 @@ const Quiz = ({ questions, experimentTitle }) => {
         setScore(newScore);
 
         // Save to backend
-        if (user && user.role === 'student' && experimentTitle) {
+        if (user && user.role === 'student' && (classroomId || experimentTitle)) {
             setServerLoading(true);
             try {
                 const config = {
                     headers: {
                         'Content-Type': 'application/json',
-                        Authorization: `Bearer ${user.token}`
+                        ...authHeaders(user.token)
                     },
                 };
                 const payload = {
+                    classroomId: classroomId,
                     experimentTitle: experimentTitle,
                     quizScore: newScore
                 };
-                await axios.post('http://localhost:5000/api/submissions', payload, config);
-                alert('Quiz score saved!');
+                await api.post('/api/submissions', payload, config);
+                toast.success('Quiz score saved');
             } catch (error) {
                 console.error(error);
-                alert('Failed to save quiz score to server.');
+                toast.error(error.response?.data?.message || 'Failed to save quiz score');
             } finally {
                 setServerLoading(false);
             }

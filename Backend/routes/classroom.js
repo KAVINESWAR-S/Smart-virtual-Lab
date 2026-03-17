@@ -3,12 +3,57 @@ const router = express.Router();
 const { protect, teacherOnly } = require('../middleware/authMiddleware.js');
 const Classroom = require('../models/Classroom.js');
 const User = require('../models/User.js');
+const multer = require('multer');
+const pdfParse = require('pdf-parse');
+
+// Configure multer for memory storage
+const upload = multer({ storage: multer.memoryStorage() });
+
+// @desc    Extract text from PDF
+// @route   POST /api/classrooms/extract-pdf
+// @access  Teacher only
+router.post('/extract-pdf', protect, teacherOnly, upload.single('pdf'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ message: 'No PDF file uploaded' });
+        }
+
+        const pdfData = await pdfParse(req.file.buffer);
+        const text = pdfData.text;
+
+        // Simple Heuristic Extraction
+        let aim = '';
+        let components = [];
+        let procedure = [];
+
+        // Try extracting Aim (everything between "Aim" and "Components" or "Procedure")
+        const aimMatch = text.match(/(?:Aim|Objective)[:\s]+(.*?)(?=Components|Apparatus|Procedure|Theory|$)/is);
+        if (aimMatch && aimMatch[1]) aim = aimMatch[1].trim();
+
+        // Try extracting Components/Apparatus
+        const compMatch = text.match(/(?:Components Required|Apparatus|Materials)[:\s]+(.*?)(?=Procedure|Theory|Observation|$)/is);
+        if (compMatch && compMatch[1]) {
+            components = compMatch[1].split(/[,\n]/).map(c => c.replace(/^[-\*\d\.\s]+/, '').trim()).filter(c => c);
+        }
+
+        // Try extracting Procedure
+        const procMatch = text.match(/(?:Procedure|Steps)[:\s]+(.*?)(?=Observation|Conclusion|Result|$)/is);
+        if (procMatch && procMatch[1]) {
+            procedure = procMatch[1].split(/\n/).map(p => p.replace(/^[-\*\d\.\s]+/, '').trim()).filter(p => p.length > 5);
+        }
+
+        res.json({ aim, components, procedure });
+    } catch (error) {
+        console.error('PDF Extraction Error:', error);
+        res.status(500).json({ message: 'Failed to extract text from PDF' });
+    }
+});
 
 // @desc    Create a new classroom (Experiment)
 // @route   POST /api/classrooms
 // @access  Teacher only
 router.post('/', protect, teacherOnly, async (req, res) => {
-    const { name, aim, procedure, components, quiz, simulationEnabled } = req.body;
+    const { name, aim, procedure, components, quiz, simulationEnabled, dueAt, attemptLimit, gradingRubric } = req.body;
     // Generate a unique 6-character code
     const code = Math.random().toString(36).substring(2, 8).toUpperCase();
 
@@ -21,6 +66,9 @@ router.post('/', protect, teacherOnly, async (req, res) => {
             procedure,
             components,
             quiz,
+            dueAt: dueAt || null,
+            attemptLimit: attemptLimit ?? null,
+            gradingRubric: gradingRubric ?? null,
             simulationEnabled
         });
         res.status(201).json(classroom);

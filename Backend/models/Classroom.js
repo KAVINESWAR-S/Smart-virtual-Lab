@@ -37,6 +37,18 @@ const classroomSchema = new mongoose.Schema({
         options: [String],
         answer: String
     }],
+    dueAt: {
+        type: Date,
+        default: null
+    },
+    attemptLimit: {
+        type: Number,
+        default: null
+    },
+    gradingRubric: {
+        type: Object,
+        default: null
+    },
     simulationEnabled: {
         type: Boolean,
         default: true

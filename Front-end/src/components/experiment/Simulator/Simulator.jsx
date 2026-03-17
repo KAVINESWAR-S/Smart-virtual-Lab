@@ -1,4 +1,11 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, {
+    useState,
+    useCallback,
+    useRef,
+    useEffect,
+    forwardRef,
+    useImperativeHandle,
+} from 'react';
 import {
     ReactFlow,
     ReactFlowProvider,
@@ -7,8 +14,6 @@ import {
     useEdgesState,
     Controls,
     Background,
-    applyNodeChanges,
-    applyEdgeChanges,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import ComponentPalette from './ComponentPalette';
@@ -17,6 +22,9 @@ import {
     LEDNode,
     SwitchNode,
     ResistorNode,
+    DiodeNode,
+    CapacitorNode,
+    InductorNode,
     AndGateNode,
     OrGateNode,
     NotGateNode
@@ -28,13 +36,13 @@ const nodeTypes = {
     led: LEDNode,
     switch: SwitchNode,
     resistor: ResistorNode,
+    diode: DiodeNode,
+    capacitor: CapacitorNode,
+    inductor: InductorNode,
     andGate: AndGateNode,
     orGate: OrGateNode,
     notGate: NotGateNode,
 };
-
-const initialNodes = [];
-const initialEdges = [];
 
 let id = 0;
 const getId = () => `dndnode_${id++}`;
@@ -42,29 +50,74 @@ const getId = () => `dndnode_${id++}`;
 const DEFAULT_NODES = [];
 const DEFAULT_EDGES = [];
 
-const Simulator = ({ onSubmit, initialNodes = DEFAULT_NODES, initialEdges = DEFAULT_EDGES, readOnly = false, timeLimit }) => {
+const Simulator = forwardRef(
+    (
+        { onSubmit, initialNodes = DEFAULT_NODES, initialEdges = DEFAULT_EDGES, readOnly = false, timeLimit },
+        ref
+    ) => {
     const reactFlowWrapper = useRef(null);
     const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
     const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
     const [reactFlowInstance, setReactFlowInstance] = useState(null);
     const [isRunning, setIsRunning] = useState(false);
+    const [metrics, setMetrics] = useState(null);
+    const [showMetrics, setShowMetrics] = useState(true);
 
     // Timer state
     const [timeLeft, setTimeLeft] = useState(timeLimit || null);
 
+    // Simulation Loop
+    const handleNodeDataChange = useCallback(
+        (id, data) => {
+            setNodes((nds) =>
+                nds.map((node) => {
+                    if (node.id === id) {
+                        return { ...node, data: { ...node.data, ...data } };
+                    }
+                    return node;
+                })
+            );
+            setIsRunning(true);
+        },
+        [setNodes]
+    );
+
+    const hydrateNodes = useCallback(
+        (nodesToHydrate) =>
+            (nodesToHydrate || []).map((node) => ({
+                ...node,
+                data: {
+                    ...(node.data || {}),
+                    onChange: (data) => handleNodeDataChange(node.id, data),
+                },
+            })),
+        [handleNodeDataChange]
+    );
+
     // Sync state with props when they change
     useEffect(() => {
         // Hydrate nodes with onChange handler which is lost in JSON serialization
-        const hydratedNodes = initialNodes.map(node => ({
-            ...node,
-            data: {
-                ...node.data,
-                onChange: (data) => handleNodeDataChange(node.id, data)
-            }
-        }));
-        setNodes(hydratedNodes);
+        setNodes(hydrateNodes(initialNodes));
         setEdges(initialEdges);
     }, [initialNodes, initialEdges, setNodes, setEdges]); // Fixed dependency array
+
+    useImperativeHandle(
+        ref,
+        () => ({
+            getCircuit: () => ({ nodes, edges }),
+            setCircuit: (circuit) => {
+                const newNodes = hydrateNodes(circuit?.nodes || []);
+                const newEdges = circuit?.edges || [];
+                setNodes(newNodes);
+                setEdges(newEdges);
+            },
+            clearCircuit: () => {
+                setNodes([]);
+                setEdges([]);
+            },
+        }),
+        [edges, hydrateNodes, nodes, setEdges, setNodes]
+    );
 
     // Timer Logic
     useEffect(() => {
@@ -117,31 +170,18 @@ const Simulator = ({ onSubmit, initialNodes = DEFAULT_NODES, initialEdges = DEFA
 
             setNodes((nds) => nds.concat(newNode));
         },
-        [reactFlowInstance, readOnly], // Added readOnly dependency
+        [handleNodeDataChange, reactFlowInstance, readOnly, setNodes], // Added readOnly dependency
     );
 
     const onConnect = useCallback(
         (params) => setEdges((eds) => addEdge(params, eds)),
-        [],
+        [setEdges],
     );
-
-    // Simulation Loop
-    const handleNodeDataChange = (id, data) => {
-        setNodes((nds) =>
-            nds.map((node) => {
-                if (node.id === id) {
-                    return { ...node, data: { ...node.data, ...data } };
-                }
-                return node;
-            })
-        );
-        setIsRunning(true);
-    };
 
     const toggleSimulation = () => {
         if (!isRunning) {
             setIsRunning(true);
-            runSimulation(nodes, edges, setNodes);
+            runSimulation(nodes, edges, setNodes, setMetrics);
         } else {
             setIsRunning(false);
         }
@@ -151,7 +191,7 @@ const Simulator = ({ onSubmit, initialNodes = DEFAULT_NODES, initialEdges = DEFA
         let interval;
         if (isRunning) {
             interval = setInterval(() => {
-                runSimulation(nodes, edges, setNodes);
+                runSimulation(nodes, edges, setNodes, setMetrics);
             }, 500);
         }
         return () => clearInterval(interval);
@@ -187,6 +227,13 @@ const Simulator = ({ onSubmit, initialNodes = DEFAULT_NODES, initialEdges = DEFA
                         >
                             {isRunning ? '⏹ Stop' : '▶ Run'}
                         </button>
+                        <button
+                            onClick={() => setShowMetrics((v) => !v)}
+                            className="px-3 py-2 rounded-lg bg-slate-800 text-slate-300 border border-slate-600 hover:bg-slate-700 hover:text-white transition-colors"
+                            title="Toggle Measurements"
+                        >
+                            📊
+                        </button>
                         {!readOnly && (
                             <>
                                 <button
@@ -215,6 +262,68 @@ const Simulator = ({ onSubmit, initialNodes = DEFAULT_NODES, initialEdges = DEFA
                         )}
                     </div>
 
+                    {showMetrics && metrics && (
+                        <div className="absolute bottom-4 right-4 z-10 w-[360px] max-w-[90vw] bg-slate-900/90 backdrop-blur p-4 rounded-xl shadow-xl border border-slate-700">
+                            <div className="flex items-center justify-between mb-3">
+                                <div className="font-bold text-slate-200">Measurements</div>
+                                <div className="text-xs text-slate-400 font-mono">
+                                    Imax: {metrics.analog?.maxCurrentA === Infinity ? '∞' : (metrics.analog?.maxCurrentA ?? 0).toFixed(4)}A
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2 text-sm">
+                                <div className="bg-slate-800/50 rounded-lg border border-slate-700 p-2">
+                                    <div className="text-slate-400 text-xs">Loop</div>
+                                    <div className={`font-bold ${metrics.validation?.hasClosedLoop ? 'text-emerald-300' : 'text-slate-200'}`}>
+                                        {metrics.validation?.hasClosedLoop ? 'Closed' : 'Open'}
+                                    </div>
+                                </div>
+                                <div className="bg-slate-800/50 rounded-lg border border-slate-700 p-2">
+                                    <div className="text-slate-400 text-xs">Short</div>
+                                    <div className={`font-bold ${metrics.validation?.hasShortCircuit ? 'text-red-300' : 'text-emerald-300'}`}>
+                                        {metrics.validation?.hasShortCircuit ? 'Detected' : 'No'}
+                                    </div>
+                                </div>
+                                <div className="bg-slate-800/50 rounded-lg border border-slate-700 p-2">
+                                    <div className="text-slate-400 text-xs">R(min)</div>
+                                    <div className="font-bold text-slate-200">
+                                        {metrics.analog?.minResistanceOhm == null ? '—' : `${Math.round(metrics.analog.minResistanceOhm)}Ω`}
+                                    </div>
+                                </div>
+                                <div className="bg-slate-800/50 rounded-lg border border-slate-700 p-2">
+                                    <div className="text-slate-400 text-xs">V(batt)</div>
+                                    <div className="font-bold text-slate-200">{metrics.analog?.batteryVoltage ?? 9}V</div>
+                                </div>
+                            </div>
+
+                            {metrics.logic?.signals?.length > 0 && (
+                                <div className="mt-3">
+                                    <div className="text-xs text-slate-400 uppercase font-bold tracking-wider mb-2">Logic signals</div>
+                                    <div className="max-h-40 overflow-auto rounded-lg border border-slate-700">
+                                        <table className="w-full text-xs">
+                                            <thead className="bg-slate-800/70 text-slate-300">
+                                                <tr>
+                                                    <th className="text-left p-2">Node</th>
+                                                    <th className="text-left p-2">In</th>
+                                                    <th className="text-left p-2">Out</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-800">
+                                                {metrics.logic.signals.slice(0, 20).map((s) => (
+                                                    <tr key={s.id} className="text-slate-200">
+                                                        <td className="p-2 font-mono">{s.type}</td>
+                                                        <td className="p-2 font-mono">{JSON.stringify(s.inputs)}</td>
+                                                        <td className="p-2 font-mono">{JSON.stringify(s.outputs)}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
                     <ReactFlow
                         nodes={nodes}
                         edges={edges}
@@ -239,6 +348,7 @@ const Simulator = ({ onSubmit, initialNodes = DEFAULT_NODES, initialEdges = DEFA
             </ReactFlowProvider>
         </div>
     );
-};
+    }
+);
 
 export default Simulator;

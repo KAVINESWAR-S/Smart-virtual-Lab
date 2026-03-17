@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import toast from 'react-hot-toast';
+import { api, authHeaders } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { motion } from 'framer-motion';
 import { FaPlus, FaTimes, FaChalkboard, FaUsers, FaArrowRight, FaEdit, FaSave, FaClipboardList, FaUserPlus, FaUser, FaEnvelope, FaLock } from 'react-icons/fa';
@@ -27,8 +28,8 @@ const AdminDashboard = () => {
     const fetchUsers = async () => {
         // ... (existing fetchUsers)
         try {
-            const config = { headers: { Authorization: `Bearer ${user.token}` } };
-            const { data } = await axios.get('http://localhost:5000/api/admin/users', config);
+            const config = { headers: authHeaders(user.token) };
+            const { data } = await api.get('/api/admin/users', config);
             setUsers(data);
             if (activeTab !== 'marks') setLoading(false);
         } catch (error) {
@@ -40,9 +41,9 @@ const AdminDashboard = () => {
     const fetchSubmissions = async () => {
         setLoading(true);
         try {
-            const config = { headers: { Authorization: `Bearer ${user.token}` } };
+            const config = { headers: authHeaders(user.token) };
             const query = selectedExperiment ? `?experimentTitle=${encodeURIComponent(selectedExperiment)}` : '';
-            const { data } = await axios.get(`http://localhost:5000/api/submissions${query}`, config);
+            const { data } = await api.get(`/api/submissions${query}`, config);
             setSubmissions(data);
             setLoading(false);
         } catch (error) {
@@ -53,8 +54,8 @@ const AdminDashboard = () => {
 
     const fetchClassrooms = async () => {
         try {
-            const config = { headers: { Authorization: `Bearer ${user.token}` } };
-            const { data } = await axios.get('http://localhost:5000/api/classrooms', config);
+            const config = { headers: authHeaders(user.token) };
+            const { data } = await api.get('/api/classrooms', config);
             // Deduplicate experiment names just in case, though classrooms should have unique names usually
             const uniqueExperiments = [...new Set(data.map(c => c.name))];
             setExperiments(uniqueExperiments);
@@ -67,26 +68,26 @@ const AdminDashboard = () => {
     const createTeacher = async (e) => {
         e.preventDefault();
         try {
-            const config = { headers: { Authorization: `Bearer ${user.token}` } };
-            await axios.post('http://localhost:5000/api/admin/users', { ...newTeacher, role: 'teacher' }, config);
+            const config = { headers: authHeaders(user.token) };
+            await api.post('/api/admin/users', { ...newTeacher, role: 'teacher' }, config);
             setNewTeacher({ name: '', email: '', password: '' });
             fetchUsers();
-            alert('Teacher created successfully!');
+            toast.success('Teacher created');
         } catch (error) {
             console.error(error);
-            alert('Error creating teacher');
+            toast.error('Error creating teacher');
         }
     };
 
     const deleteUser = async (id) => {
         if (window.confirm('Are you sure you want to delete this user?')) {
             try {
-                const config = { headers: { Authorization: `Bearer ${user.token}` } };
-                await axios.delete(`http://localhost:5000/api/admin/users/${id}`, config);
+                const config = { headers: authHeaders(user.token) };
+                await api.delete(`/api/admin/users/${id}`, config);
                 fetchUsers();
             } catch (error) {
                 console.error(error);
-                alert('Error deleting user');
+                toast.error('Error deleting user');
             }
         }
     };
@@ -224,20 +225,22 @@ const AdminDashboard = () => {
                                 <th className="p-4">Student Name</th>
                                 <th className="p-4">Experiment</th>
                                 <th className="p-4">Quiz Score</th>
-                                <th className="p-4">Simulation Grade</th>
+                                <th className="p-4">Auto Sim Score</th>
+                                <th className="p-4">Manual Grade</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-700">
                             {loading ? (
-                                <tr><td colSpan="4" className="p-4 text-center">Loading marks...</td></tr>
+                                <tr><td colSpan="5" className="p-4 text-center">Loading marks...</td></tr>
                             ) : submissions.length === 0 ? (
-                                <tr><td colSpan="4" className="p-4 text-center text-gray-400">No marks recorded yet.</td></tr>
+                                <tr><td colSpan="5" className="p-4 text-center text-gray-400">No marks recorded yet.</td></tr>
                             ) : (
                                 submissions.map(sub => (
                                     <tr key={sub._id} className="hover:bg-gray-700/50 transition">
                                         <td className="p-4 font-medium text-white">{sub.student?.name || 'Unknown'}</td>
                                         <td className="p-4 text-blue-300">{sub.experimentTitle}</td>
                                         <td className="p-4 font-mono text-purple-300">{sub.quizScore != null ? sub.quizScore : 'N/A'}</td>
+                                        <td className="p-4 font-mono text-emerald-300">{sub.simulationScore != null ? `${sub.simulationScore}/10` : 'N/A'}</td>
                                         <td className="p-4 font-mono text-green-300">{sub.grade ? `${sub.grade}/10` : 'Not Graded'}</td>
                                     </tr>
                                 ))

@@ -1,4 +1,4 @@
-export const runSimulation = (nodes, edges, setNodes) => {
+export const runSimulation = (nodes, edges, setNodes, setMetrics) => {
     // 1. Digital Logic State Map (for backward compatibility with logic gates)
     const state = {};
     nodes.forEach(node => {
@@ -35,6 +35,9 @@ export const runSimulation = (nodes, edges, setNodes) => {
             else if (type === 'led' || type === 'resistor') {
                 newOutputs['out'] = nodeState.inputs['in'] || 0;
             }
+            else if (type === 'diode' || type === 'capacitor' || type === 'inductor') {
+                newOutputs['out'] = nodeState.inputs['in'] || 0;
+            }
             else if (type === 'andGate') {
                 newOutputs['out'] = (nodeState.inputs['a'] && nodeState.inputs['b']) ? 1 : 0;
             }
@@ -63,6 +66,28 @@ export const runSimulation = (nodes, edges, setNodes) => {
 
     const batteryNodes = nodes.filter(n => n.type === 'battery');
 
+    const metrics = {
+        analog: {
+            batteryVoltage: 9,
+            hasClosedLoop: false,
+            hasShortCircuit: false,
+            maxCurrentA: 0,
+            minResistanceOhm: null,
+            paths: []
+        },
+        logic: {
+            signals: []
+        },
+        validation: {
+            hasBattery: batteryNodes.length > 0,
+            hasResistor: nodes.some(n => n.type === 'resistor'),
+            hasLED: nodes.some(n => n.type === 'led'),
+            hasSwitch: nodes.some(n => n.type === 'switch'),
+            hasClosedLoop: false,
+            hasShortCircuit: false
+        }
+    };
+
     // We will accumulate states for analog components based on whether they are in a closed loop
     const newComponentStates = {}; // nodeId -> ledState
 
@@ -86,6 +111,8 @@ export const runSimulation = (nodes, edges, setNodes) => {
 
             // If switch is open, stop path
             if (node.type === 'switch' && !node.data?.isOn) return;
+            // Capacitor blocks DC in this simulator
+            if (node.type === 'capacitor') return;
 
             // Follow outgoing edges
             const outgoingEdges = adjacencyList[currentNodeId] || [];
@@ -106,8 +133,12 @@ export const runSimulation = (nodes, edges, setNodes) => {
 
         // Process found paths
         paths.forEach(path => {
+            metrics.analog.hasClosedLoop = true;
+            metrics.validation.hasClosedLoop = true;
             let totalResistance = 0;
             let totalLEDVoltage = 0;
+            let totalDiodeDrop = 0;
+            let diodeReverse = false;
 
             const pathNodeIds = path.map(e => e.targetNodeId);
             // pathNodeIds includes the final battery node.
@@ -121,21 +152,54 @@ export const runSimulation = (nodes, edges, setNodes) => {
                 } else if (node.type === 'led') {
                     const is5V = node.data?.label === 'LED (5V)';
                     totalLEDVoltage += is5V ? 5 : 2;
+                } else if (node.type === 'diode') {
+                    totalDiodeDrop += (node.data?.forwardDrop !== undefined ? Number(node.data.forwardDrop) : 0.7);
+                } else if (node.type === 'inductor') {
+                    totalResistance += 0; // DC short approximation
                 }
             });
 
-            const batteryVoltage = 9;
+            // Check diode polarity along this path using handle directions:
+            // diode should be entered via targetHandle 'in' and exited via sourceHandle 'out'
+            path.forEach(edge => {
+                const srcNode = nodes.find(n => n.id === edge.source);
+                const tgtNode = nodes.find(n => n.id === edge.target);
+                if (tgtNode?.type === 'diode' && edge.targetHandle && edge.targetHandle !== 'in') diodeReverse = true;
+                if (srcNode?.type === 'diode' && edge.sourceHandle && edge.sourceHandle !== 'out') diodeReverse = true;
+            });
+
+            const batteryVoltage = metrics.analog.batteryVoltage;
             let current = 0;
 
+            if (diodeReverse) {
+                current = 0;
+            } else
             if (totalResistance === 0) {
                 // Short circuit if voltage > 0
-                current = (batteryVoltage > totalLEDVoltage) ? Infinity : 0;
+                current = (batteryVoltage > (totalLEDVoltage + totalDiodeDrop)) ? Infinity : 0;
             } else {
-                current = (batteryVoltage - totalLEDVoltage) / totalResistance;
+                current = (batteryVoltage - totalLEDVoltage - totalDiodeDrop) / totalResistance;
             }
 
             // If negative current (LEDs blocking reverse or not enough voltage), current is 0
             if (current <= 0) current = 0;
+
+            metrics.analog.paths.push({
+                totalResistanceOhm: totalResistance,
+                totalLEDVoltage,
+                currentA: current
+            });
+            if (current === Infinity) {
+                metrics.analog.hasShortCircuit = true;
+                metrics.validation.hasShortCircuit = true;
+            } else {
+                metrics.analog.maxCurrentA = Math.max(metrics.analog.maxCurrentA, current);
+            }
+            if (totalResistance !== 0) {
+                metrics.analog.minResistanceOhm = metrics.analog.minResistanceOhm == null
+                    ? totalResistance
+                    : Math.min(metrics.analog.minResistanceOhm, totalResistance);
+            }
 
             // Determine LED states in this path
             pathNodeIds.forEach(id => {
@@ -220,5 +284,20 @@ export const runSimulation = (nodes, edges, setNodes) => {
     const nodesChanged = JSON.stringify(newNodes) !== JSON.stringify(nodes);
     if (nodesChanged) {
         setNodes(newNodes);
+    }
+
+    // 4. Expose digital logic signals for UI
+    metrics.logic.signals = nodes
+        .filter(n => ['andGate', 'orGate', 'notGate', 'switch', 'battery', 'led'].includes(n.type))
+        .map(n => ({
+            id: n.id,
+            type: n.type,
+            label: n.data?.label || n.type,
+            inputs: state[n.id]?.inputs || {},
+            outputs: state[n.id]?.outputs || {}
+        }));
+
+    if (typeof setMetrics === 'function') {
+        setMetrics(metrics);
     }
 };

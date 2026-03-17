@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import axios from "axios";
+import toast from "react-hot-toast";
+import { api, authHeaders } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import Sidebar from "../components/Sidebar";
 import Aim from "../components/experiment/Aim";
@@ -8,6 +9,7 @@ import ComponentsRequired from "../components/experiment/ComponentsRequired";
 import Procedure from "../components/experiment/Procedure";
 import Simulation from "../components/experiment/Simulation";
 import Quiz from "../components/experiment/Quiz";
+import { generateLabReportPdf } from "../utils/labReportPdf";
 
 const ExperimentPage = () => {
     const { id } = useParams();
@@ -17,13 +19,14 @@ const ExperimentPage = () => {
     const [experiment, setExperiment] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [exporting, setExporting] = useState(false);
 
     useEffect(() => {
         const fetchExperiment = async () => {
             try {
-                const config = { headers: { Authorization: `Bearer ${user.token}` } };
+                const config = { headers: authHeaders(user.token) };
                 // Fetch classroom details which acts as the experiment definition
-                const { data } = await axios.get(`http://localhost:5000/api/classrooms/${id}`, config);
+                const { data } = await api.get(`/api/classrooms/${id}`, config);
 
                 // Transform data if necessary or use directly
                 setExperiment({
@@ -52,6 +55,31 @@ const ExperimentPage = () => {
     if (error) return <div className="text-center p-10 text-red-500">{error}</div>;
     if (!experiment) return <div className="text-center p-10">Experiment not found</div>;
 
+    const handleExportPdf = async () => {
+        if (!user || !experiment) return;
+        setExporting(true);
+        try {
+            const config = { headers: authHeaders(user.token) };
+            const { data } = await api.get('/api/submissions/my', config);
+            const sub = data.find(s =>
+                (s.classroom?._id === experiment.id || s.classroom === experiment.id) ||
+                s.experimentTitle === experiment.title
+            );
+
+            const doc = generateLabReportPdf({
+                experiment,
+                student: user,
+                submission: sub || null,
+            });
+            doc.save(`lab-report-${(experiment.title || 'experiment').replace(/[^a-z0-9]+/gi, '_').toLowerCase()}.pdf`);
+        } catch (e) {
+            console.error(e);
+            toast.error('Failed to export PDF');
+        } finally {
+            setExporting(false);
+        }
+    };
+
     const renderContent = () => {
         switch (activeTab) {
             case "aim":
@@ -64,7 +92,7 @@ const ExperimentPage = () => {
                 // experiment object passed here matches what Simulation expects (has title)
                 return <Simulation experiment={experiment} />;
             case "quiz":
-                return <Quiz questions={experiment.quiz} experimentTitle={experiment.title} />;
+                return <Quiz questions={experiment.quiz} experimentTitle={experiment.title} classroomId={experiment.id} />;
             default:
                 return <Aim aim={experiment.aim} />;
         }
@@ -79,12 +107,21 @@ const ExperimentPage = () => {
             <div className="flex-grow p-4 lg:p-8 transition-all duration-300 md:ml-64">
                 <div className="md:hidden glass-panel p-4 sticky top-4 z-20 flex justify-between items-center mb-6">
                     <h1 className="font-bold text-white truncate">{experiment.title}</h1>
-                    <button
-                        onClick={() => navigate("/student-dashboard")}
-                        className="text-xs bg-slate-800 px-3 py-1.5 rounded-lg text-slate-300 border border-slate-700 hover:text-white hover:border-slate-500 transition-colors"
-                    >
-                        Exit
-                    </button>
+                    <div className="flex gap-2">
+                        <button
+                            onClick={handleExportPdf}
+                            disabled={exporting}
+                            className="text-xs bg-slate-800 px-3 py-1.5 rounded-lg text-slate-300 border border-slate-700 hover:text-white hover:border-slate-500 transition-colors disabled:opacity-60"
+                        >
+                            {exporting ? 'Exporting…' : 'Export PDF'}
+                        </button>
+                        <button
+                            onClick={() => navigate("/student-dashboard")}
+                            className="text-xs bg-slate-800 px-3 py-1.5 rounded-lg text-slate-300 border border-slate-700 hover:text-white hover:border-slate-500 transition-colors"
+                        >
+                            Exit
+                        </button>
+                    </div>
                 </div>
 
                 <div className="max-w-5xl mx-auto">
@@ -98,6 +135,13 @@ const ExperimentPage = () => {
                                     </span>
                                 </p>
                             </div>
+                            <button
+                                onClick={handleExportPdf}
+                                disabled={exporting}
+                                className="px-4 py-2 rounded-lg bg-slate-800 text-slate-200 border border-slate-700 hover:bg-slate-700 font-bold disabled:opacity-60"
+                            >
+                                {exporting ? 'Exporting…' : 'Export PDF'}
+                            </button>
                         </div>
                     </header>
 

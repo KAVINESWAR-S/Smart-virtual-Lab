@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import toast from 'react-hot-toast';
+import { api, authHeaders } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import Simulator from '../experiment/Simulator/Simulator';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FaPlus, FaTimes, FaChalkboard, FaUsers, FaArrowRight, FaEdit, FaSave, FaClipboardList } from 'react-icons/fa';
+import { FaPlus, FaTimes, FaChalkboard, FaUsers, FaArrowRight, FaEdit, FaSave, FaClipboardList, FaFilePdf, FaTrash } from 'react-icons/fa';
 
 const TeacherDashboard = () => {
     const { user } = useAuth();
     const [classrooms, setClassrooms] = useState([]);
-    const [loading, setLoading] = useState(true);
 
     // Create Classroom State
     const [isCreating, setIsCreating] = useState(false);
@@ -18,6 +18,8 @@ const TeacherDashboard = () => {
         procedure: [''],
         components: [],
         quiz: [{ question: '', options: ['', '', '', ''], answer: '' }],
+        dueAt: '',
+        attemptLimit: '',
         simulationEnabled: true
     });
 
@@ -36,13 +38,11 @@ const TeacherDashboard = () => {
 
     const fetchClassrooms = async () => {
         try {
-            const config = { headers: { Authorization: `Bearer ${user.token}` } };
-            const { data } = await axios.get('http://localhost:5000/api/classrooms', config);
+            const config = { headers: authHeaders(user.token) };
+            const { data } = await api.get('/api/classrooms', config);
             setClassrooms(data);
-            setLoading(false);
         } catch (error) {
             console.error(error);
-            setLoading(false);
         }
     };
 
@@ -56,6 +56,28 @@ const TeacherDashboard = () => {
 
     const addProcedureStep = () => {
         setNewClassroom({ ...newClassroom, procedure: [...newClassroom.procedure, ''] });
+    };
+
+    const removeProcedureStep = (index) => {
+        const newProcedure = [...newClassroom.procedure];
+        newProcedure.splice(index, 1);
+        setNewClassroom({ ...newClassroom, procedure: newProcedure });
+    };
+
+    const handleComponentChange = (index, value) => {
+        const newComponents = [...newClassroom.components];
+        newComponents[index] = value;
+        setNewClassroom({ ...newClassroom, components: newComponents });
+    };
+
+    const addComponentStep = () => {
+        setNewClassroom({ ...newClassroom, components: [...newClassroom.components, ''] });
+    };
+
+    const removeComponentStep = (index) => {
+        const newComponents = [...newClassroom.components];
+        newComponents.splice(index, 1);
+        setNewClassroom({ ...newClassroom, components: newComponents });
     };
 
     const handleQuizChange = (index, field, value, optionIndex = null) => {
@@ -72,37 +94,86 @@ const TeacherDashboard = () => {
         setNewClassroom({ ...newClassroom, quiz: [...newClassroom.quiz, { question: '', options: ['', '', '', ''], answer: '' }] });
     };
 
+    const removeQuizQuestion = (index) => {
+        if (newClassroom.quiz.length === 1) return;
+        const newQuiz = [...newClassroom.quiz];
+        newQuiz.splice(index, 1);
+        setNewClassroom({ ...newClassroom, quiz: newQuiz });
+    };
+
+    const handlePdfUpload = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const formData = new FormData();
+        formData.append('pdf', file);
+
+        const uploadToast = toast.loading('Extracting data from PDF...');
+
+        try {
+            const config = {
+                headers: { 
+                    'Content-Type': 'multipart/form-data',
+                    ...authHeaders(user.token) 
+                },
+            };
+            const { data } = await api.post('/api/classrooms/extract-pdf', formData, config);
+            
+            // Use extracted data or fallback to what we already typed
+            setNewClassroom(prev => ({
+                ...prev,
+                aim: data.aim || prev.aim,
+                components: data.components.length > 0 ? data.components : prev.components,
+                procedure: data.procedure.length > 0 ? data.procedure : prev.procedure
+            }));
+            
+            toast.success('PDF Processed! Form auto-filled.', { id: uploadToast });
+        } catch (error) {
+            console.error(error);
+            toast.error(error.response?.data?.message || 'Failed to extract PDF', { id: uploadToast });
+        }
+    };
+
     const createClassroom = async (e) => {
         e.preventDefault();
         try {
             const config = {
-                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.token}` },
+                headers: { 'Content-Type': 'application/json', ...authHeaders(user.token) },
             };
-            await axios.post('http://localhost:5000/api/classrooms', newClassroom, config);
+            const payload = {
+                ...newClassroom,
+                dueAt: newClassroom.dueAt ? new Date(newClassroom.dueAt).toISOString() : null,
+                attemptLimit: newClassroom.attemptLimit ? Number(newClassroom.attemptLimit) : null,
+            };
+            await api.post('/api/classrooms', payload, config);
             setIsCreating(false);
             setNewClassroom({
                 name: '', aim: '', procedure: [''], components: [],
-                quiz: [{ question: '', options: ['', '', '', ''], answer: '' }], simulationEnabled: true
+                quiz: [{ question: '', options: ['', '', '', ''], answer: '' }],
+                dueAt: '',
+                attemptLimit: '',
+                simulationEnabled: true
             });
             fetchClassrooms();
-            alert('Classroom created successfully!');
+            toast.success('Classroom created');
         } catch (error) {
-            console.error(error);
-            alert('Failed to create classroom');
+            console.error("Experiment creation error:", error.response?.data || error);
+            const errMsg = error.response?.data?.message || 'Failed to create classroom';
+            toast.error(errMsg);
         }
     };
 
     // --- View/Grade Handlers ---
     const viewClassroom = async (id) => {
         try {
-            const config = { headers: { Authorization: `Bearer ${user.token}` } };
-            const { data } = await axios.get(`http://localhost:5000/api/classrooms/${id}`, config);
+            const config = { headers: authHeaders(user.token) };
+            const { data } = await api.get(`/api/classrooms/${id}`, config);
             setClassroomDetails(data);
             setSelectedClassroom(id);
             setSelectedStudent(null);
 
             // Fetch all submissions for this experiment to show in the table
-            const subRes = await axios.get(`http://localhost:5000/api/submissions?experimentTitle=${encodeURIComponent(data.name)}`, config);
+            const subRes = await api.get(`/api/submissions?classroomId=${encodeURIComponent(data._id)}`, config);
             setAllClassroomSubmissions(subRes.data);
         } catch (error) { console.error(error); }
     };
@@ -110,9 +181,12 @@ const TeacherDashboard = () => {
     const handleViewSubmissions = async (student) => {
         setSelectedStudent(student);
         try {
-            const config = { headers: { Authorization: `Bearer ${user.token}` } };
-            const { data } = await axios.get(`http://localhost:5000/api/submissions/student/${student._id}`, config);
-            const relevantSubmissions = data.filter(sub => sub.experimentTitle === classroomDetails.name);
+            const config = { headers: authHeaders(user.token) };
+            const { data } = await api.get(`/api/submissions/student/${student._id}`, config);
+            const relevantSubmissions = data.filter(sub =>
+                (sub.classroom?._id === classroomDetails._id || sub.classroom === classroomDetails._id) ||
+                sub.experimentTitle === classroomDetails.name
+            );
             setStudentSubmissions(relevantSubmissions);
         } catch (error) { console.error(error); }
     };
@@ -120,9 +194,9 @@ const TeacherDashboard = () => {
     const handleGradeSubmit = async (submissionId) => {
         try {
             const config = {
-                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.token}` },
+                headers: { 'Content-Type': 'application/json', ...authHeaders(user.token) },
             };
-            await axios.put(`http://localhost:5000/api/submissions/${submissionId}/grade`, {
+            await api.put(`/api/submissions/${submissionId}/grade`, {
                 grade: gradeInput, feedback: feedbackInput
             }, config);
 
@@ -131,8 +205,8 @@ const TeacherDashboard = () => {
                 sub._id === submissionId ? { ...sub, grade: gradeInput, feedback: feedbackInput } : sub
             );
             setStudentSubmissions(updatedSubmissions);
-            alert("Graded successfully!");
-        } catch (error) { console.error(error); alert("Failed to grade."); }
+            toast.success('Graded');
+        } catch (error) { console.error(error); toast.error('Failed to grade'); }
     };
 
     const getStudentQuizScore = (studentId) => {
@@ -143,10 +217,24 @@ const TeacherDashboard = () => {
         return sub && sub.quizScore != null ? `${sub.quizScore}/${total}` : 'N/A';
     };
 
+    const getStudentSimulationScore = (studentId) => {
+        const sub = allClassroomSubmissions.find(s =>
+            (s.student?._id === studentId || s.student === studentId)
+        );
+        return sub && sub.simulationScore != null ? `${sub.simulationScore}/10` : 'N/A';
+    };
+
+    const getStudentAttemptsUsed = (studentId) => {
+        const sub = allClassroomSubmissions.find(s =>
+            (s.student?._id === studentId || s.student === studentId)
+        );
+        return sub && sub.attemptsUsed != null ? sub.attemptsUsed : 0;
+    };
+
     const exportToCSV = () => {
         if (!classroomDetails || !classroomDetails.students) return;
 
-        const headers = ["Student Name", "Email", "Quiz Score", "Simulation Grade", "Feedback"];
+        const headers = ["Student Name", "Email", "Quiz Score", "Auto Sim Score", "Manual Grade", "Attempts Used", "Feedback"];
         const rows = classroomDetails.students.map(student => {
             const sub = allClassroomSubmissions.find(s =>
                 (s.student?._id === student._id || s.student === student._id)
@@ -155,7 +243,9 @@ const TeacherDashboard = () => {
             const totalQuiz = classroomDetails.quiz?.length || 0;
             // Use 'X out of Y' format to prevent Excel from auto-converting to date (e.g. 5/10 -> 5-Oct)
             const quizScore = sub && sub.quizScore != null ? `"${sub.quizScore} out of ${totalQuiz}"` : '"N/A"';
+            const autoSimScore = sub && sub.simulationScore != null ? sub.simulationScore : 'N/A';
             const grade = sub && sub.grade ? sub.grade : 'N/A';
+            const attemptsUsed = sub && sub.attemptsUsed != null ? sub.attemptsUsed : 0;
             // Escape potential commas in feedback
             const feedback = sub && sub.feedback ? `"${sub.feedback.replace(/"/g, '""')}"` : '""';
 
@@ -163,7 +253,9 @@ const TeacherDashboard = () => {
                 `"${student.name}"`,
                 `"${student.email}"`,
                 quizScore,
+                autoSimScore,
                 grade,
+                attemptsUsed,
                 feedback
             ].join(",");
         });
@@ -225,6 +317,12 @@ const TeacherDashboard = () => {
                                         <div className="flex items-center text-slate-400 text-sm mb-6 gap-2">
                                             <FaUsers /> {room.students.length} Students
                                         </div>
+                                        {(room.dueAt || room.attemptLimit) && (
+                                            <div className="text-xs text-slate-400 mb-6 space-y-1">
+                                                {room.dueAt && <div>Due: <span className="text-slate-200">{new Date(room.dueAt).toLocaleString()}</span></div>}
+                                                {room.attemptLimit && <div>Attempts: <span className="text-slate-200">{room.attemptLimit}</span></div>}
+                                            </div>
+                                        )}
                                         <button
                                             onClick={() => viewClassroom(room._id)}
                                             className="btn-secondary w-full flex items-center justify-center gap-2 group-hover:bg-purple-600 group-hover:border-purple-500 transition-all"
@@ -246,9 +344,15 @@ const TeacherDashboard = () => {
                         >
                             <div className="flex justify-between items-center mb-6 border-b border-slate-700 pb-4">
                                 <h2 className="text-2xl font-bold">Design New Experiment</h2>
-                                <button onClick={() => setIsCreating(false)} className="text-slate-400 hover:text-white">
-                                    <FaTimes size={24} />
-                                </button>
+                                <div className="flex items-center gap-4">
+                                    <label className="cursor-pointer bg-purple-600/20 hover:bg-purple-600/40 text-purple-400 px-4 py-2 rounded-lg border border-purple-500/50 flex items-center gap-2 transition-all">
+                                        <FaFilePdf /> Auto-Fill via PDF
+                                        <input type="file" accept="application/pdf" className="hidden" onChange={handlePdfUpload} />
+                                    </label>
+                                    <button onClick={() => setIsCreating(false)} className="text-slate-400 hover:text-white">
+                                        <FaTimes size={24} />
+                                    </button>
+                                </div>
                             </div>
 
                             <form onSubmit={createClassroom} className="space-y-6">
@@ -277,25 +381,85 @@ const TeacherDashboard = () => {
                                     </div>
                                 </div>
 
-                                <div>
-                                    <label className="block text-sm font-bold mb-2 text-slate-300">Procedure Steps</label>
-                                    <div className="space-y-2">
-                                        {newClassroom.procedure.map((step, index) => (
-                                            <div key={index} className="flex gap-2">
-                                                <span className="p-3 text-slate-500 font-mono text-sm">{index + 1}.</span>
-                                                <input
-                                                    type="text"
-                                                    className="glass-input w-full"
-                                                    value={step}
-                                                    onChange={(e) => handleProcedureChange(index, e.target.value)}
-                                                    required
-                                                />
-                                            </div>
-                                        ))}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div>
+                                        <label className="block text-sm font-bold mb-2 text-pink-400 drop-shadow-[0_0_8px_rgba(236,72,153,0.8)]">Due Date (optional)</label>
+                                        <input
+                                            type="datetime-local"
+                                            className="w-full bg-slate-950 border-2 border-purple-500 focus:border-pink-500 text-pink-300 p-3 rounded-lg font-bold shadow-[0_0_15px_rgba(168,85,247,0.4)] focus:shadow-[0_0_20px_rgba(236,72,153,0.6)] outline-none transition-all"
+                                            style={{ colorScheme: "dark" }}
+                                            value={newClassroom.dueAt}
+                                            onChange={(e) => setNewClassroom({ ...newClassroom, dueAt: e.target.value })}
+                                        />
                                     </div>
-                                    <button type="button" onClick={addProcedureStep} className="mt-2 text-blue-400 text-sm hover:text-blue-300 font-semibold flex items-center gap-1">
-                                        <FaPlus size={10} /> Add Step
-                                    </button>
+                                    <div>
+                                        <label className="block text-sm font-bold mb-2 text-slate-300">Attempt Limit (optional)</label>
+                                        <input
+                                            type="number"
+                                            min="1"
+                                            className="glass-input w-full"
+                                            placeholder="e.g. 3"
+                                            value={newClassroom.attemptLimit}
+                                            onChange={(e) => setNewClassroom({ ...newClassroom, attemptLimit: e.target.value })}
+                                        />
+                                        <p className="text-xs text-slate-500 mt-2">
+                                            Counts when a student re-submits a quiz or simulation after already submitting once.
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div>
+                                        <label className="block text-sm font-bold mb-2 text-slate-300">Components Required</label>
+                                        <div className="space-y-2">
+                                            {newClassroom.components.map((comp, index) => (
+                                                <div key={index} className="flex gap-2">
+                                                    <span className="p-3 text-slate-500 font-mono text-sm">•</span>
+                                                    <input
+                                                        type="text"
+                                                        className="glass-input w-full"
+                                                        placeholder="e.g. 10k Resistor"
+                                                        value={comp}
+                                                        onChange={(e) => handleComponentChange(index, e.target.value)}
+                                                        required
+                                                    />
+                                                    <button type="button" onClick={() => removeComponentStep(index)} className="text-slate-500 hover:text-red-400 px-2 transition-colors">
+                                                        <FaTimes />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                            {newClassroom.components.length === 0 && (
+                                                <p className="text-sm text-slate-500 italic mb-2">No components added yet.</p>
+                                            )}
+                                        </div>
+                                        <button type="button" onClick={addComponentStep} className="mt-2 text-emerald-400 text-sm hover:text-emerald-300 font-semibold flex items-center gap-1">
+                                            <FaPlus size={10} /> Add Component
+                                        </button>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-bold mb-2 text-slate-300">Procedure Steps</label>
+                                        <div className="space-y-2">
+                                            {newClassroom.procedure.map((step, index) => (
+                                                <div key={index} className="flex gap-2 items-start">
+                                                    <span className="p-3 text-slate-500 font-mono text-sm min-w-[30px]">{index + 1}.</span>
+                                                    <textarea
+                                                        className="glass-input w-full min-h-[50px] resize-y"
+                                                        placeholder="Enter step..."
+                                                        value={step}
+                                                        onChange={(e) => handleProcedureChange(index, e.target.value)}
+                                                        required
+                                                    />
+                                                    <button type="button" onClick={() => removeProcedureStep(index)} className="text-slate-500 hover:text-red-400 px-2 mt-3 transition-colors">
+                                                        <FaTimes />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        <button type="button" onClick={addProcedureStep} className="mt-2 text-blue-400 text-sm hover:text-blue-300 font-semibold flex items-center gap-1">
+                                            <FaPlus size={10} /> Add Step
+                                        </button>
+                                    </div>
                                 </div>
 
                                 <div className="bg-slate-900/50 p-6 rounded-xl border border-slate-700/50">
@@ -308,11 +472,16 @@ const TeacherDashboard = () => {
 
                                     <div className="space-y-4">
                                         {newClassroom.quiz.map((q, qIndex) => (
-                                            <div key={qIndex} className="bg-slate-950 p-4 rounded-lg border border-slate-800">
+                                            <div key={qIndex} className="bg-slate-950 p-4 rounded-lg border border-slate-800 relative group">
+                                                {newClassroom.quiz.length > 1 && (
+                                                    <button type="button" onClick={() => removeQuizQuestion(qIndex)} className="absolute top-4 right-4 text-slate-600 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100" title="Delete Question">
+                                                        <FaTrash size={14} />
+                                                    </button>
+                                                )}
                                                 <input
                                                     type="text"
                                                     placeholder={`Question ${qIndex + 1}`}
-                                                    className="glass-input w-full mb-3"
+                                                    className="glass-input w-full mb-3 pr-10"
                                                     value={q.question}
                                                     onChange={(e) => handleQuizChange(qIndex, 'question', e.target.value)}
                                                     required
@@ -383,6 +552,8 @@ const TeacherDashboard = () => {
                                             <th className="p-4">Student Name</th>
                                             <th className="p-4">Email</th>
                                             <th className="p-4">Quiz Score</th>
+                                            <th className="p-4">Sim Score</th>
+                                            <th className="p-4">Attempts</th>
                                             <th className="p-4 text-right">Actions</th>
                                         </tr>
                                     </thead>
@@ -392,6 +563,8 @@ const TeacherDashboard = () => {
                                                 <td className="p-4 font-medium text-white">{student.name}</td>
                                                 <td className="p-4 text-slate-400">{student.email}</td>
                                                 <td className="p-4 font-mono text-blue-400">{getStudentQuizScore(student._id)}</td>
+                                                <td className="p-4 font-mono text-emerald-300">{getStudentSimulationScore(student._id)}</td>
+                                                <td className="p-4 font-mono text-slate-300">{getStudentAttemptsUsed(student._id)}</td>
                                                 <td className="p-4 text-right">
                                                     <button
                                                         className="text-blue-400 hover:text-blue-300 font-medium text-sm border border-blue-500/30 px-3 py-1 rounded hover:bg-blue-500/10 transition-all"

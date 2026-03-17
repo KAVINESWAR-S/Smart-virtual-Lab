@@ -1,12 +1,18 @@
 const mongoose = require('mongoose');
+const dotenv = require('dotenv');
+
+// Load environment variables from the .env file
+dotenv.config();
 
 const connectDB = async () => {
     try {
-        const conn = await mongoose.connect(process.env.MONGO_URI);
-        console.log(`MongoDB Connected: ${conn.connection.host}`);
-    } catch (error) {
-        console.error(`Error: ${error.message}`);
-        process.exit(1);
+        await mongoose.connect(process.env.MONGO_URI, {
+            serverSelectionTimeoutMS: 10000,
+        });
+        console.log('MongoDB Connected');
+    } catch (err) {
+        console.error('Error: ', err.message);
+        process.exit(1); // Exit the process with failure code
     }
 };
 

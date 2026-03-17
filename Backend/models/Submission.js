@@ -6,6 +6,12 @@ const submissionSchema = new mongoose.Schema({
         ref: 'User',
         required: true
     },
+    classroom: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Classroom',
+        required: false,
+        index: true
+    },
     experimentTitle: {
         type: String,
         required: true
@@ -20,6 +26,26 @@ const submissionSchema = new mongoose.Schema({
     },
     quizScore: {
         type: Number,
+        default: null
+    },
+    metricsSnapshot: {
+        type: Object,
+        default: null
+    },
+    simulationScore: {
+        type: Number,
+        default: null
+    },
+    scoreBreakdown: {
+        type: Object,
+        default: null
+    },
+    attemptsUsed: {
+        type: Number,
+        default: 0
+    },
+    lastAttemptAt: {
+        type: Date,
         default: null
     },
     feedback: {

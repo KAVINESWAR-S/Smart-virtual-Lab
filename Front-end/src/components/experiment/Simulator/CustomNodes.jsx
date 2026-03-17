@@ -4,7 +4,7 @@ import { Handle, Position } from 'reactflow';
 const nodeStyles = "bg-white border-2 border-gray-800 rounded shadow-md p-2 min-w-[100px] text-center flex flex-col items-center justify-center relative";
 
 // Battery Node
-export const BatteryNode = memo(({ data }) => {
+export const BatteryNode = memo(() => {
     return (
         <div className={`${nodeStyles} border-yellow-500`}>
             <Handle type="source" position={Position.Right} id="pos" style={{ top: '30%', background: 'red' }} />
@@ -123,6 +123,47 @@ export const ResistorNode = memo(({ data }) => {
     );
 });
 
+// Diode Node (simple polarity enforcement)
+export const DiodeNode = memo(({ data }) => {
+    const forwardDrop = data.forwardDrop !== undefined ? data.forwardDrop : 0.7;
+
+    return (
+        <div className={`${nodeStyles} border-slate-500`}>
+            <Handle type="target" position={Position.Left} id="in" />
+            <div className="text-xl font-bold text-slate-700">⟶|</div>
+            <div className="text-xs font-bold mt-1 text-slate-800">{data.label || 'Diode'}</div>
+            <div className="text-[10px] text-gray-500 font-bold uppercase">{forwardDrop}V drop</div>
+            <Handle type="source" position={Position.Right} id="out" />
+        </div>
+    );
+});
+
+// Capacitor Node (DC open-circuit in simulator)
+export const CapacitorNode = memo(({ data }) => {
+    return (
+        <div className={`${nodeStyles} border-cyan-500`}>
+            <Handle type="target" position={Position.Left} id="in" />
+            <div className="text-xl font-bold text-cyan-700">|‖|</div>
+            <div className="text-xs font-bold mt-1 text-slate-800">{data.label || 'Capacitor'}</div>
+            <div className="text-[10px] text-gray-500 font-bold uppercase">DC block</div>
+            <Handle type="source" position={Position.Right} id="out" />
+        </div>
+    );
+});
+
+// Inductor Node (DC short-circuit-ish)
+export const InductorNode = memo(({ data }) => {
+    return (
+        <div className={`${nodeStyles} border-purple-500`}>
+            <Handle type="target" position={Position.Left} id="in" />
+            <div className="text-xl font-bold text-purple-700">∿∿∿</div>
+            <div className="text-xs font-bold mt-1 text-slate-800">{data.label || 'Inductor'}</div>
+            <div className="text-[10px] text-gray-500 font-bold uppercase">DC short</div>
+            <Handle type="source" position={Position.Right} id="out" />
+        </div>
+    );
+});
+
 // Logic Gate Template
 const GateNode = ({ label, symbol }) => (
     <div className={`${nodeStyles} rounded-lg`}>
@@ -134,9 +175,9 @@ const GateNode = ({ label, symbol }) => (
     </div>
 );
 
-export const AndGateNode = memo(({ data }) => <GateNode label="AND" symbol="&" />);
-export const OrGateNode = memo(({ data }) => <GateNode label="OR" symbol="≥1" />);
-export const NotGateNode = memo(({ data }) => (
+export const AndGateNode = memo(() => <GateNode label="AND" symbol="&" />);
+export const OrGateNode = memo(() => <GateNode label="OR" symbol="≥1" />);
+export const NotGateNode = memo(() => (
     <div className={`${nodeStyles} rounded-lg`}>
         <Handle type="target" position={Position.Left} id="in" />
         <div className="text-lg font-bold">!</div>

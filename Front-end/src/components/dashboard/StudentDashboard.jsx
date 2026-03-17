@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import toast from 'react-hot-toast';
+import { api, authHeaders } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -20,11 +21,9 @@ const StudentDashboard = () => {
 
     const fetchData = async () => {
         try {
-            const config = {
-                headers: { Authorization: `Bearer ${user.token}` },
-            };
-            const classroomRes = await axios.get('http://localhost:5000/api/classrooms', config);
-            const submissionRes = await axios.get('http://localhost:5000/api/submissions/my', config);
+            const config = { headers: authHeaders(user.token) };
+            const classroomRes = await api.get('/api/classrooms', config);
+            const submissionRes = await api.get('/api/submissions/my', config);
 
             setClassrooms(classroomRes.data);
             setMySubmissions(submissionRes.data);
@@ -41,15 +40,15 @@ const StudentDashboard = () => {
             const config = {
                 headers: {
                     'Content-Type': 'application/json',
-                    Authorization: `Bearer ${user.token}`
+                    ...authHeaders(user.token)
                 },
             };
-            await axios.post('http://localhost:5000/api/classrooms/join', { code: joinCode }, config);
+            await api.post('/api/classrooms/join', { code: joinCode }, config);
             setJoinCode('');
             fetchData(); // Refresh list
-            alert('Joined classroom successfully!');
+            toast.success('Joined classroom');
         } catch (error) {
-            alert(error.response?.data?.message || 'Error joining classroom');
+            toast.error(error.response?.data?.message || 'Error joining classroom');
         }
     };
 
@@ -139,7 +138,10 @@ const StudentDashboard = () => {
 
                             {loading ? (
                                 <div className="text-center p-8 text-slate-400">Loading experiments...</div>
-                            ) : classrooms.filter(room => !mySubmissions.some(sub => sub.experimentTitle === room.name)).length === 0 ? (
+                            ) : classrooms.filter(room => !mySubmissions.some(sub =>
+                                (sub.classroom?._id === room._id || sub.classroom === room._id) ||
+                                sub.experimentTitle === room.name
+                            )).length === 0 ? (
                                 <motion.div
                                     variants={itemVariants}
                                     className="glass-panel p-8 text-center text-slate-300 italic border border-slate-700/50"
@@ -148,7 +150,10 @@ const StudentDashboard = () => {
                                 </motion.div>
                             ) : (
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    {classrooms.filter(room => !mySubmissions.some(sub => sub.experimentTitle === room.name)).map(room => (
+                                    {classrooms.filter(room => !mySubmissions.some(sub =>
+                                        (sub.classroom?._id === room._id || sub.classroom === room._id) ||
+                                        sub.experimentTitle === room.name
+                                    )).map(room => (
                                         <motion.div
                                             key={room._id}
                                             variants={itemVariants}
@@ -159,6 +164,12 @@ const StudentDashboard = () => {
                                             </div>
                                             <h3 className="font-bold text-xl mb-1 text-white group-hover:text-blue-300 transition-colors">{room.name}</h3>
                                             <p className="text-slate-400 text-sm mb-4">Code: <span className="font-mono text-slate-300">{room.code}</span></p>
+                                            {(room.dueAt || room.attemptLimit) && (
+                                                <div className="text-xs text-slate-400 mb-4 space-y-1">
+                                                    {room.dueAt && <div>Due: <span className="text-slate-200">{new Date(room.dueAt).toLocaleString()}</span></div>}
+                                                    {room.attemptLimit && <div>Attempts: <span className="text-slate-200">{room.attemptLimit}</span></div>}
+                                                </div>
+                                            )}
 
                                             <Link
                                                 to={`/experiment/${room._id}`}
