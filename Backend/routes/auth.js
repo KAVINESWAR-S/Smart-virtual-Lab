@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const User = require('../models/User.js');
 const jwt = require('jsonwebtoken');
+const PasswordRequest = require('../models/PasswordRequest');
+const { protect } = require('../middleware/authMiddleware');
 
 // Generate JWT Helper
 const generateToken = (id) => {
@@ -32,7 +34,7 @@ router.get('/debug-admin', async (req, res) => {
 // @route   POST /api/auth/register
 // @access  Public
 router.post('/register', async (req, res) => {
-    const { name, email, password } = req.body;
+    const { name, email, password, department, year } = req.body;
 
     try {
         const userExists = await User.findOne({ email });
@@ -45,6 +47,8 @@ router.post('/register', async (req, res) => {
             name,
             email,
             password,
+            department,
+            year,
             role: 'student', // Force role to student for public registration
         });
 
@@ -54,6 +58,9 @@ router.post('/register', async (req, res) => {
                 name: user.name,
                 email: user.email,
                 role: user.role,
+                department: user.department,
+                year: user.year,
+                isFirstLogin: user.isFirstLogin,
                 token: generateToken(user._id),
             });
         } else {
@@ -79,10 +86,99 @@ router.post('/login', async (req, res) => {
                 name: user.name,
                 email: user.email,
                 role: user.role,
+                department: user.department,
+                year: user.year,
+                isFirstLogin: user.isFirstLogin,
                 token: generateToken(user._id),
             });
         } else {
             res.status(401).json({ message: 'Invalid email or password' });
+        }
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+});
+
+// @desc    Get current user profile
+// @route   GET /api/auth/me
+// @access  Private
+router.get('/me', protect, async (req, res) => {
+    try {
+        const user = await User.findById(req.user._id).select('-password');
+        if (user) {
+            res.json(user);
+        } else {
+            res.status(404).json({ message: 'User not found' });
+        }
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+});
+
+// @desc    Change Password (Logged In)
+// @route   POST /api/auth/change-password
+// @access  Private
+router.post('/change-password', protect, async (req, res) => {
+    const { currentPassword, newPassword } = req.body;
+
+    try {
+        const user = await User.findById(req.user._id);
+
+        if (user && (await user.matchPassword(currentPassword))) {
+            user.password = newPassword;
+            if (user.isFirstLogin) {
+                user.isFirstLogin = false;
+            }
+            await user.save();
+            
+            // If they had an approved request, mark it resolved
+            const approvedRequest = await PasswordRequest.findOne({ user: req.user._id, status: 'approved' });
+            if (approvedRequest) {
+                approvedRequest.status = 'resolved';
+                await approvedRequest.save();
+            }
+
+            res.json({ message: 'Password updated successfully' });
+        } else {
+            res.status(404).json({ message: 'User not found' });
+        }
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+});
+
+// @desc    Request a password reset via Admin
+// @route   POST /api/auth/password-request
+// @access  Private
+router.post('/password-request', protect, async (req, res) => {
+    try {
+        // Check if there is already a pending request
+        const existingRequest = await PasswordRequest.findOne({ user: req.user._id, status: 'pending' });
+        if (existingRequest) {
+            return res.status(400).json({ message: 'You already have a pending password reset request.' });
+        }
+
+        const request = await PasswordRequest.create({ user: req.user._id });
+        res.status(201).json(request);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+});
+
+// @desc    Get status of pending/approved password request
+// @route   GET /api/auth/password-request/status
+// @access  Private
+router.get('/password-request/status', protect, async (req, res) => {
+    try {
+        const activeRequest = await PasswordRequest.findOne({ 
+            user: req.user._id, 
+            status: { $in: ['pending', 'approved'] } 
+        }).sort({ createdAt: -1 });
+        
+        if (activeRequest) {
+            res.json({ status: activeRequest.status });
+        } else {
+            res.json({ status: 'none' });
         }
     } catch (error) {
         res.status(500).json({ message: error.message });

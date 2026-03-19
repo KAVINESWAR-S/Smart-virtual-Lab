@@ -20,6 +20,10 @@ const userSchema = new mongoose.Schema({
         enum: ['student', 'teacher', 'admin'],
         default: 'student',
     },
+    department: { type: String },
+    year: { type: String },
+    studentClass: { type: String },
+    isFirstLogin: { type: Boolean, default: false },
     classroomsJoined: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Classroom'

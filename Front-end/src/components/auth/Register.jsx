@@ -7,20 +7,26 @@ const Register = () => {
         name: '',
         email: '',
         password: '',
+        confirmPassword: '',
+        department: '',
+        year: ''
     });
     const [error, setError] = useState('');
     const { register } = useAuth();
     const navigate = useNavigate();
 
-    const { name, email, password } = formData;
+    const { name, email, password, confirmPassword, department, year } = formData;
 
     const onChange = e => setFormData({ ...formData, [e.target.name]: e.target.value });
 
     const onSubmit = async e => {
         e.preventDefault();
         setError('');
+        if (password !== confirmPassword) {
+            return setError('Passwords do not match');
+        }
         try {
-            await register(name, email, password, 'student'); // Default role to student
+            await register(name, email, password, 'student', department, year);
             navigate('/student-dashboard');
         } catch (err) {
             setError(err.message || 'Registration failed'); // Assuming err is an object or string
@@ -57,12 +63,45 @@ const Register = () => {
                         />
                     </div>
                     <div className="mb-4">
+                        <label className="block text-sm font-medium mb-1">Year</label>
+                        <input
+                            type="text"
+                            name="year"
+                            className="w-full p-2 rounded bg-gray-700 border border-gray-600 focus:outline-none focus:border-blue-500"
+                            value={year}
+                            onChange={onChange}
+                            required
+                        />
+                    </div>
+                    <div className="mb-4">
+                        <label className="block text-sm font-medium mb-1">Department</label>
+                        <input
+                            type="text"
+                            name="department"
+                            className="w-full p-2 rounded bg-gray-700 border border-gray-600 focus:outline-none focus:border-blue-500"
+                            value={department}
+                            onChange={onChange}
+                            required
+                        />
+                    </div>
+                    <div className="mb-4">
                         <label className="block text-sm font-medium mb-1">Password</label>
                         <input
                             type="password"
                             name="password"
                             className="w-full p-2 rounded bg-gray-700 border border-gray-600 focus:outline-none focus:border-blue-500"
                             value={password}
+                            onChange={onChange}
+                            required
+                        />
+                    </div>
+                    <div className="mb-6">
+                        <label className="block text-sm font-medium mb-1">Confirm Password</label>
+                        <input
+                            type="password"
+                            name="confirmPassword"
+                            className="w-full p-2 rounded bg-gray-700 border border-gray-600 focus:outline-none focus:border-blue-500"
+                            value={confirmPassword}
                             onChange={onChange}
                             required
                         />

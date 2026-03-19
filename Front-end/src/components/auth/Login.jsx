@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { api } from '../../api/client';
 
 const Login = () => {
     const [email, setEmail] = useState('');
@@ -40,8 +41,12 @@ const Login = () => {
                 className="glass-panel w-full max-w-md p-8 relative z-10"
             >
                 <div className="text-center mb-8">
-                    <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-400 to-cyan-300 bg-clip-text text-transparent mb-2">Welcome Back</h1>
-                    <p className="text-slate-400">Access your virtual laboratory</p>
+                    <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-400 to-cyan-300 bg-clip-text text-transparent mb-2">
+                        Welcome Back
+                    </h1>
+                    <p className="text-slate-400">
+                        Access your virtual laboratory
+                    </p>
                 </div>
 
                 {error && (
@@ -54,8 +59,8 @@ const Login = () => {
                     </motion.div>
                 )}
 
-                <form onSubmit={handleSubmit} className="space-y-6">
-                    <div>
+                    <form onSubmit={handleSubmit} className="space-y-6">
+                        <div>
                         <label className="block text-sm font-medium text-slate-300 mb-2">Email Address</label>
                         <input
                             type="email"
@@ -79,13 +84,18 @@ const Login = () => {
                         />
                     </div>
 
-                    <button
-                        type="submit"
-                        className="btn-primary w-full py-3 text-lg shadow-blue-500/25"
-                    >
-                        Sign In
-                    </button>
-                </form>
+                        <button
+                            type="submit"
+                            className="btn-primary w-full py-3 text-lg shadow-blue-500/25"
+                        >
+                            Sign In
+                        </button>
+                        <div className="text-center mt-4">
+                            <p className="text-slate-500 text-sm">
+                                Forgot Password? <span className="text-blue-400">Contact your Administrator.</span>
+                            </p>
+                        </div>
+                    </form>
 
                 <div className="mt-8 text-center text-slate-400 text-sm">
                     Don't have an account?{' '}

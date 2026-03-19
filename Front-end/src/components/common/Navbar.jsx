@@ -1,10 +1,13 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import UserProfileModal from '../profile/UserProfileModal';
+import { FaUserCircle } from 'react-icons/fa';
 
 const Navbar = () => {
     const { user, logout } = useAuth();
     const location = useLocation();
+    const [isProfileOpen, setIsProfileOpen] = useState(false);
 
     // Hide navbar on login/register pages AND experiment pages (which have their own sidebar/layout)
     if (['/login', '/register'].includes(location.pathname) || location.pathname.startsWith('/experiment/')) return null;
@@ -43,14 +46,26 @@ const Navbar = () => {
                         <div className="text-xs text-slate-400 uppercase tracking-wider">{user.role}</div>
                     </div>
 
+                    <FaUserCircle 
+                        size={32} 
+                        className="text-blue-400 cursor-pointer hover:text-blue-300 transition-colors drop-shadow-sm"
+                        onClick={() => setIsProfileOpen(true)}
+                        title="View Profile"
+                    />
+
                     <button
                         onClick={logout}
-                        className="btn-danger text-sm py-1.5 px-3"
+                        className="btn-danger text-sm py-1.5 px-3 ml-2"
                     >
                         Logout
                     </button>
                 </div>
             </div>
+            
+            <UserProfileModal 
+                isOpen={isProfileOpen} 
+                onClose={() => setIsProfileOpen(false)} 
+            />
         </nav>
     );
 };

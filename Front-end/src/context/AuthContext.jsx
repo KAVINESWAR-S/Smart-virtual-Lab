@@ -45,7 +45,7 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
-    const register = async (name, email, password, role) => {
+    const register = async (name, email, password, role, department, year) => {
         try {
             const config = {
                 headers: {
@@ -55,7 +55,7 @@ export const AuthProvider = ({ children }) => {
 
             const { data } = await api.post(
                 '/api/auth/register',
-                { name, email, password, role },
+                { name, email, password, role, department, year },
                 config
             );
 

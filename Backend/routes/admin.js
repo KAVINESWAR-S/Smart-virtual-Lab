@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
+const PasswordRequest = require('../models/PasswordRequest');
 const { protect, adminOnly } = require('../middleware/authMiddleware');
 const bcrypt = require('bcryptjs');
 
@@ -20,7 +21,7 @@ router.get('/users', protect, adminOnly, async (req, res) => {
 // @route   POST /api/admin/users
 // @access  Admin only
 router.post('/users', protect, adminOnly, async (req, res) => {
-    const { name, email, password, role } = req.body;
+    const { name, email, password, role, department } = req.body;
 
     // Only allow creating teachers or admins
     if (role !== 'teacher' && role !== 'admin') {
@@ -37,7 +38,9 @@ router.post('/users', protect, adminOnly, async (req, res) => {
             name,
             email,
             password,
-            role
+            role,
+            department: role === 'teacher' ? department : undefined,
+            isFirstLogin: role === 'teacher'
         });
 
         if (user) {
@@ -65,6 +68,39 @@ router.delete('/users/:id', protect, adminOnly, async (req, res) => {
             res.json({ message: 'User removed' });
         } else {
             res.status(404).json({ message: 'User not found' });
+        }
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+});
+
+// @desc    Get all pending password requests
+// @route   GET /api/admin/password-requests
+// @access  Admin only
+router.get('/password-requests', protect, adminOnly, async (req, res) => {
+    try {
+        const requests = await PasswordRequest.find({ status: 'pending' }).populate('user', 'name email role');
+        const studentRequests = requests.filter(req => req.user && req.user.role === 'student');
+        res.json(studentRequests);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+});
+
+// @desc    Update password request status
+// @route   PUT /api/admin/password-requests/:id
+// @access  Admin only
+router.put('/password-requests/:id', protect, adminOnly, async (req, res) => {
+    try {
+        const { status } = req.body; // 'resolved' or 'rejected'
+        const request = await PasswordRequest.findById(req.params.id);
+        
+        if (request) {
+            request.status = status;
+            await request.save();
+            res.json(request);
+        } else {
+            res.status(404).json({ message: 'Request not found' });
         }
     } catch (error) {
         res.status(500).json({ message: error.message });

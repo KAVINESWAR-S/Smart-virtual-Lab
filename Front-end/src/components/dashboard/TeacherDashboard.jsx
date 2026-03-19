@@ -4,7 +4,7 @@ import { api, authHeaders } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import Simulator from '../experiment/Simulator/Simulator';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FaPlus, FaTimes, FaChalkboard, FaUsers, FaArrowRight, FaEdit, FaSave, FaClipboardList, FaFilePdf, FaTrash } from 'react-icons/fa';
+import { FaPlus, FaTimes, FaChalkboard, FaUsers, FaArrowRight, FaEdit, FaSave, FaClipboardList, FaFilePdf, FaTrash, FaLock } from 'react-icons/fa';
 
 const TeacherDashboard = () => {
     const { user } = useAuth();
@@ -22,6 +22,12 @@ const TeacherDashboard = () => {
         attemptLimit: '',
         simulationEnabled: true
     });
+
+    // First Login Policy State
+    const [showFirstLoginModal, setShowFirstLoginModal] = useState(user?.isFirstLogin || false);
+    const [flCurrentPassword, setFlCurrentPassword] = useState('');
+    const [flNewPassword, setFlNewPassword] = useState('');
+    const [flConfirmPassword, setFlConfirmPassword] = useState('');
 
     // View/Grade State
     const [selectedClassroom, setSelectedClassroom] = useState(null);
@@ -43,6 +49,24 @@ const TeacherDashboard = () => {
             setClassrooms(data);
         } catch (error) {
             console.error(error);
+        }
+    };
+
+    const handleFirstLoginSubmit = async (e) => {
+        e.preventDefault();
+        if (flNewPassword !== flConfirmPassword) {
+            return toast.error('New passwords do not match');
+        }
+        try {
+            const config = {
+                headers: { 'Content-Type': 'application/json', ...authHeaders(user.token) },
+            };
+            await api.post('/api/auth/change-password', { currentPassword: flCurrentPassword, newPassword: flNewPassword }, config);
+            toast.success('Password updated successfully');
+            setShowFirstLoginModal(false);
+            if (user) user.isFirstLogin = false;
+        } catch (error) {
+            toast.error(error.response?.data?.message || 'Failed to update password');
         }
     };
 
@@ -670,6 +694,60 @@ const TeacherDashboard = () => {
                                     </div>
                                 )}
                             </div>
+                        </div>
+                    </motion.div>
+                )}
+
+                {/* First Login Forced Modal */}
+                {showFirstLoginModal && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        className="fixed inset-0 bg-slate-950/95 backdrop-blur-md flex justify-center items-center z-[200] p-4"
+                    >
+                        <div className="bg-slate-900 w-full max-w-md p-8 rounded-2xl shadow-2xl border border-purple-500/50">
+                            <div className="text-center mb-6">
+                                <div className="w-16 h-16 bg-purple-500/20 text-purple-400 rounded-full flex items-center justify-center mx-auto mb-4">
+                                    <FaLock size={30} />
+                                </div>
+                                <h2 className="text-2xl font-bold text-white mb-2">Welcome, Teacher!</h2>
+                                <p className="text-slate-400 text-sm">For security reasons, please change your password before accessing the dashboard.</p>
+                            </div>
+                            <form onSubmit={handleFirstLoginSubmit} className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-300 mb-1">Current Password (provided by Admin)</label>
+                                    <input
+                                        type="password"
+                                        className="glass-input w-full"
+                                        value={flCurrentPassword}
+                                        onChange={(e) => setFlCurrentPassword(e.target.value)}
+                                        required
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-300 mb-1">New Password</label>
+                                    <input
+                                        type="password"
+                                        className="glass-input w-full"
+                                        value={flNewPassword}
+                                        onChange={(e) => setFlNewPassword(e.target.value)}
+                                        required
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-300 mb-1">Confirm New Password</label>
+                                    <input
+                                        type="password"
+                                        className="glass-input w-full"
+                                        value={flConfirmPassword}
+                                        onChange={(e) => setFlConfirmPassword(e.target.value)}
+                                        required
+                                    />
+                                </div>
+                                <button type="submit" className="w-full btn-primary py-3 mt-4 bg-purple-600 hover:bg-purple-700 hover:shadow-purple-500/25">
+                                    Update Password & Continue
+                                </button>
+                            </form>
                         </div>
                     </motion.div>
                 )}
