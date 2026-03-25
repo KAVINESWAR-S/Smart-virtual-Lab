@@ -32,14 +32,6 @@ const submissionSchema = new mongoose.Schema({
         type: Object,
         default: null
     },
-    simulationScore: {
-        type: Number,
-        default: null
-    },
-    scoreBreakdown: {
-        type: Object,
-        default: null
-    },
     attemptsUsed: {
         type: Number,
         default: 0

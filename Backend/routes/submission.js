@@ -3,7 +3,7 @@ const router = express.Router();
 const { protect, teacherOnly, adminOrTeacher } = require('../middleware/authMiddleware.js');
 const Submission = require('../models/Submission.js');
 const Classroom = require('../models/Classroom.js');
-const { computeCircuitMetrics, gradeCircuit } = require('../utils/circuitMetrics.js');
+const { computeCircuitMetrics } = require('../utils/circuitMetrics.js');
 
 // ... (previous routes)
 
@@ -68,13 +68,7 @@ router.post('/', protect, async (req, res) => {
 
             if (shouldRegrade && submission.circuitData) {
                 const metrics = computeCircuitMetrics(submission.circuitData);
-                const { simulationScore, scoreBreakdown } = gradeCircuit({
-                    metrics,
-                    rubric: classroom?.gradingRubric || null,
-                });
                 submission.metricsSnapshot = metrics;
-                submission.simulationScore = simulationScore;
-                submission.scoreBreakdown = scoreBreakdown;
             }
 
             await submission.save();
@@ -82,13 +76,8 @@ router.post('/', protect, async (req, res) => {
         }
 
         let metricsSnapshot = null;
-        let simulationScore = null;
-        let scoreBreakdown = null;
         if (hasCircuitPayload) {
             metricsSnapshot = computeCircuitMetrics(circuitData);
-            const gradeResult = gradeCircuit({ metrics: metricsSnapshot, rubric: classroom?.gradingRubric || null });
-            simulationScore = gradeResult.simulationScore;
-            scoreBreakdown = gradeResult.scoreBreakdown;
         }
 
         // Create new
@@ -101,8 +90,6 @@ router.post('/', protect, async (req, res) => {
             attemptsUsed: (circuitData || quizScore !== undefined) ? 1 : 0,
             lastAttemptAt: (circuitData || quizScore !== undefined) ? new Date() : null,
             metricsSnapshot,
-            simulationScore,
-            scoreBreakdown,
         });
 
         res.status(201).json(submission);

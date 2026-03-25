@@ -258,7 +258,7 @@ const TeacherDashboard = () => {
     const exportToCSV = () => {
         if (!classroomDetails || !classroomDetails.students) return;
 
-        const headers = ["Student Name", "Email", "Quiz Score", "Auto Sim Score", "Manual Grade", "Attempts Used", "Feedback"];
+        const headers = ["Student Name", "Email", "Quiz Score", "Manual Grade", "Attempts Used", "Feedback"];
         const rows = classroomDetails.students.map(student => {
             const sub = allClassroomSubmissions.find(s =>
                 (s.student?._id === student._id || s.student === student._id)
@@ -267,7 +267,6 @@ const TeacherDashboard = () => {
             const totalQuiz = classroomDetails.quiz?.length || 0;
             // Use 'X out of Y' format to prevent Excel from auto-converting to date (e.g. 5/10 -> 5-Oct)
             const quizScore = sub && sub.quizScore != null ? `"${sub.quizScore} out of ${totalQuiz}"` : '"N/A"';
-            const autoSimScore = sub && sub.simulationScore != null ? sub.simulationScore : 'N/A';
             const grade = sub && sub.grade ? sub.grade : 'N/A';
             const attemptsUsed = sub && sub.attemptsUsed != null ? sub.attemptsUsed : 0;
             // Escape potential commas in feedback
@@ -277,7 +276,6 @@ const TeacherDashboard = () => {
                 `"${student.name}"`,
                 `"${student.email}"`,
                 quizScore,
-                autoSimScore,
                 grade,
                 attemptsUsed,
                 feedback
@@ -576,7 +574,6 @@ const TeacherDashboard = () => {
                                             <th className="p-4">Student Name</th>
                                             <th className="p-4">Email</th>
                                             <th className="p-4">Quiz Score</th>
-                                            <th className="p-4">Sim Score</th>
                                             <th className="p-4">Attempts</th>
                                             <th className="p-4 text-right">Actions</th>
                                         </tr>
@@ -587,7 +584,6 @@ const TeacherDashboard = () => {
                                                 <td className="p-4 font-medium text-white">{student.name}</td>
                                                 <td className="p-4 text-slate-400">{student.email}</td>
                                                 <td className="p-4 font-mono text-blue-400">{getStudentQuizScore(student._id)}</td>
-                                                <td className="p-4 font-mono text-emerald-300">{getStudentSimulationScore(student._id)}</td>
                                                 <td className="p-4 font-mono text-slate-300">{getStudentAttemptsUsed(student._id)}</td>
                                                 <td className="p-4 text-right">
                                                     <button

@@ -27,7 +27,10 @@ import {
     InductorNode,
     AndGateNode,
     OrGateNode,
-    NotGateNode
+    NotGateNode,
+    AmmeterNode,
+    VoltmeterNode,
+    RheostatNode
 } from './CustomNodes';
 import { runSimulation } from "../../../utils/simulationEngine";
 
@@ -42,6 +45,9 @@ const nodeTypes = {
     andGate: AndGateNode,
     orGate: OrGateNode,
     notGate: NotGateNode,
+    ammeter: AmmeterNode,
+    voltmeter: VoltmeterNode,
+    rheostat: RheostatNode,
 };
 
 let id = 0;

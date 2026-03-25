@@ -65,10 +65,13 @@ export const runSimulation = (nodes, edges, setNodes, setMetrics) => {
     });
 
     const batteryNodes = nodes.filter(n => n.type === 'battery');
+    const globalBatteryVoltage = batteryNodes.length > 0 && batteryNodes[0].data?.voltage !== undefined 
+        ? Number(batteryNodes[0].data.voltage) 
+        : 9;
 
     const metrics = {
         analog: {
-            batteryVoltage: 9,
+            batteryVoltage: globalBatteryVoltage,
             hasClosedLoop: false,
             hasShortCircuit: false,
             maxCurrentA: 0,
@@ -112,7 +115,7 @@ export const runSimulation = (nodes, edges, setNodes, setMetrics) => {
             // If switch is open, stop path
             if (node.type === 'switch' && !node.data?.isOn) return;
             // Capacitor blocks DC in this simulator
-            if (node.type === 'capacitor') return;
+            if (node.type === 'capacitor' || node.type === 'voltmeter') return;
 
             // Follow outgoing edges
             const outgoingEdges = adjacencyList[currentNodeId] || [];
@@ -130,6 +133,8 @@ export const runSimulation = (nodes, edges, setNodes, setMetrics) => {
         };
 
         dfs(battery.id, [], new Set());
+
+        const nodeVoltages = {};
 
         // Process found paths
         paths.forEach(path => {
@@ -149,13 +154,15 @@ export const runSimulation = (nodes, edges, setNodes, setMetrics) => {
 
                 if (node.type === 'resistor') {
                     totalResistance += (node.data?.resistance !== undefined ? node.data.resistance : 350);
+                } else if (node.type === 'rheostat') {
+                    totalResistance += (node.data?.resistance !== undefined ? node.data.resistance : 500);
+                } else if (node.type === 'ammeter' || node.type === 'inductor') {
+                    totalResistance += 0; // Ideal ammeter/inductor
                 } else if (node.type === 'led') {
                     const is5V = node.data?.label === 'LED (5V)';
                     totalLEDVoltage += is5V ? 5 : 2;
                 } else if (node.type === 'diode') {
                     totalDiodeDrop += (node.data?.forwardDrop !== undefined ? Number(node.data.forwardDrop) : 0.7);
-                } else if (node.type === 'inductor') {
-                    totalResistance += 0; // DC short approximation
                 }
             });
 
@@ -168,7 +175,7 @@ export const runSimulation = (nodes, edges, setNodes, setMetrics) => {
                 if (srcNode?.type === 'diode' && edge.sourceHandle && edge.sourceHandle !== 'out') diodeReverse = true;
             });
 
-            const batteryVoltage = metrics.analog.batteryVoltage;
+            const batteryVoltage = battery.data?.voltage !== undefined ? Number(battery.data.voltage) : 9;
             let current = 0;
 
             if (diodeReverse) {
@@ -201,6 +208,29 @@ export const runSimulation = (nodes, edges, setNodes, setMetrics) => {
                     : Math.min(metrics.analog.minResistanceOhm, totalResistance);
             }
 
+            // Node Voltage Estimation
+            let currentVoltage = batteryVoltage;
+            pathNodeIds.forEach(id => {
+                if (!nodeVoltages[id]) nodeVoltages[id] = { in: [], out: [] };
+                nodeVoltages[id].in.push(currentVoltage);
+
+                const node = nodes.find(n => n.id === id);
+                let vDrop = 0;
+                if (node && node.type === 'resistor') {
+                    vDrop = current * (node.data?.resistance !== undefined ? node.data.resistance : 350);
+                } else if (node && node.type === 'rheostat') {
+                    vDrop = current * (node.data?.resistance !== undefined ? node.data.resistance : 500);
+                } else if (node && node.type === 'led') {
+                    const is5V = node.data?.label === 'LED (5V)';
+                    vDrop = is5V ? 5 : 2;
+                } else if (node && node.type === 'diode') {
+                    vDrop = (node.data?.forwardDrop !== undefined ? Number(node.data.forwardDrop) : 0.7);
+                }
+                if (currentVoltage < vDrop) vDrop = currentVoltage;
+                currentVoltage -= vDrop;
+                nodeVoltages[id].out.push(currentVoltage);
+            });
+
             // Determine LED states in this path
             pathNodeIds.forEach(id => {
                 const node = nodes.find(n => n.id === id);
@@ -229,8 +259,48 @@ export const runSimulation = (nodes, edges, setNodes, setMetrics) => {
                         (ledState === currentStateObj.state && ledIntensity > currentStateObj.intensity)) {
                         newComponentStates[id] = { state: ledState, intensity: ledIntensity };
                     }
+                } else if (node && node.type === 'ammeter') {
+                    const existing = newComponentStates[id] ? parseFloat(newComponentStates[id].current) : 0;
+                    newComponentStates[id] = { current: (existing + current).toFixed(3) };
                 }
             });
+        });
+
+        // Calculate Average Node Voltages and Voltmeter Readings
+        const avgVoltages = {};
+        Object.keys(nodeVoltages).forEach(id => {
+            const inV = nodeVoltages[id].in;
+            const outV = nodeVoltages[id].out;
+            avgVoltages[id] = {
+                in: inV.length ? inV.reduce((a, b) => a + b, 0) / inV.length : 0,
+                out: outV.length ? outV.reduce((a, b) => a + b, 0) / outV.length : 0
+            };
+        });
+
+        nodes.filter(n => n.type === 'voltmeter').forEach(vmNode => {
+            const inEdge = edges.find(e => e.target === vmNode.id && e.targetHandle === 'in');
+            const outEdge = edges.find(e => e.source === vmNode.id && e.sourceHandle === 'out');
+
+            let vIn = null;
+            let vOut = null;
+
+            if (inEdge) {
+                const srcNode = nodes.find(n => n.id === inEdge.source);
+                if (srcNode?.type === 'battery') vIn = srcNode.data?.voltage !== undefined ? Number(srcNode.data.voltage) : 9;
+                else if (avgVoltages[inEdge.source]) vIn = avgVoltages[inEdge.source].out;
+            }
+
+            if (outEdge) {
+                const tgtNode = nodes.find(n => n.id === outEdge.target);
+                if (tgtNode?.type === 'battery') vOut = 0;
+                else if (avgVoltages[outEdge.target]) vOut = avgVoltages[outEdge.target].in;
+            }
+
+            if (vIn === null) vIn = 0;
+            if (vOut === null) vOut = 0;
+
+            const reading = Math.abs(vIn - vOut);
+            newComponentStates[vmNode.id] = { voltage: reading.toFixed(2) };
         });
     });
 
@@ -276,6 +346,16 @@ export const runSimulation = (nodes, edges, setNodes, setMetrics) => {
 
             if (node.data.ledState !== newState || node.data.ledIntensity !== newIntensity) {
                 return { ...node, data: { ...node.data, ledState: newState, ledIntensity: newIntensity } };
+            }
+        } else if (node.type === 'ammeter') {
+            const stateObj = newComponentStates[node.id] || { current: "0.000" };
+            if (node.data.current !== stateObj.current) {
+                return { ...node, data: { ...node.data, current: stateObj.current } };
+            }
+        } else if (node.type === 'voltmeter') {
+            const stateObj = newComponentStates[node.id] || { voltage: "0.00" };
+            if (node.data.voltage !== stateObj.voltage) {
+                return { ...node, data: { ...node.data, voltage: stateObj.voltage } };
             }
         }
         return node;

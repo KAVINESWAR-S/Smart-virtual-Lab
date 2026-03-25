@@ -310,7 +310,6 @@ const AdminDashboard = () => {
                                 <th className="p-4">Student Name</th>
                                 <th className="p-4">Experiment</th>
                                 <th className="p-4">Quiz Score</th>
-                                <th className="p-4">Auto Sim Score</th>
                                 <th className="p-4">Manual Grade</th>
                             </tr>
                         </thead>
@@ -325,7 +324,6 @@ const AdminDashboard = () => {
                                         <td className="p-4 font-medium text-white">{sub.student?.name || 'Unknown'}</td>
                                         <td className="p-4 text-blue-300">{sub.experimentTitle}</td>
                                         <td className="p-4 font-mono text-purple-300">{sub.quizScore != null ? sub.quizScore : 'N/A'}</td>
-                                        <td className="p-4 font-mono text-emerald-300">{sub.simulationScore != null ? `${sub.simulationScore}/10` : 'N/A'}</td>
                                         <td className="p-4 font-mono text-green-300">{sub.grade ? `${sub.grade}/10` : 'Not Graded'}</td>
                                     </tr>
                                 ))

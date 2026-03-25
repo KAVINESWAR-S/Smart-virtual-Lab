@@ -27,7 +27,6 @@ export function generateLabReportPdf({ experiment, student, submission }) {
             ['Experiment code', experiment?.code || '—'],
             ['Aim', experiment?.aim || '—'],
             ['Quiz score', submission?.quizScore != null ? `${submission.quizScore}/${experiment?.quiz?.length || '—'}` : '—'],
-            ['Auto simulation score', submission?.simulationScore != null ? `${submission.simulationScore}/10` : '—'],
             ['Manual grade', submission?.grade != null ? `${submission.grade}/10` : '—'],
             ['Attempts used', submission?.attemptsUsed != null ? String(submission.attemptsUsed) : '—'],
             ['Submitted at', submission?.submittedAt ? formatDateTime(submission.submittedAt) : '—'],

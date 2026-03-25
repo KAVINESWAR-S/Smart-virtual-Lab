@@ -4,12 +4,30 @@ import { Handle, Position } from 'reactflow';
 const nodeStyles = "bg-white border-2 border-gray-800 rounded shadow-md p-2 min-w-[100px] text-center flex flex-col items-center justify-center relative";
 
 // Battery Node
-export const BatteryNode = memo(() => {
+export const BatteryNode = memo(({ data }) => {
+    const [voltage, setVoltage] = React.useState(data.voltage !== undefined ? data.voltage : 9);
+
+    const handleChange = (e) => {
+        const val = parseInt(e.target.value, 10);
+        const finalVal = isNaN(val) ? 0 : val;
+        setVoltage(finalVal);
+        data.onChange && data.onChange({ voltage: finalVal });
+    };
+
     return (
         <div className={`${nodeStyles} border-yellow-500`}>
             <Handle type="source" position={Position.Right} id="pos" style={{ top: '30%', background: 'red' }} />
             <div className="text-sm font-bold">Battery</div>
-            <div className="text-xs text-gray-500">9V</div>
+            <input
+                type="range"
+                min="0"
+                max="24"
+                value={voltage}
+                onChange={handleChange}
+                className="nodrag w-16 mt-1"
+                title="Voltage"
+            />
+            <div className="text-[10px] text-gray-500 font-bold uppercase">{voltage} V</div>
             <Handle type="target" position={Position.Right} id="neg" style={{ top: '70%', background: 'black' }} />
         </div>
     );
@@ -185,3 +203,59 @@ export const NotGateNode = memo(() => (
         <Handle type="source" position={Position.Right} id="out" />
     </div>
 ));
+
+// Ammeter Node
+export const AmmeterNode = memo(({ data }) => {
+    return (
+        <div className={`${nodeStyles} border-blue-500`}>
+            <Handle type="target" position={Position.Left} id="in" />
+            <div className="text-xl font-bold text-blue-700">A</div>
+            <div className="text-xs font-bold mt-1 text-slate-800">Ammeter</div>
+            <div className="text-[10px] text-gray-500 font-bold uppercase">{data.current !== undefined ? data.current + ' A' : '0 A'}</div>
+            <Handle type="source" position={Position.Right} id="out" />
+        </div>
+    );
+});
+
+// Voltmeter Node
+export const VoltmeterNode = memo(({ data }) => {
+    return (
+        <div className={`${nodeStyles} border-green-500`}>
+            <Handle type="target" position={Position.Left} id="in" />
+            <div className="text-xl font-bold text-green-700">V</div>
+            <div className="text-xs font-bold mt-1 text-slate-800">Voltmeter</div>
+            <div className="text-[10px] text-gray-500 font-bold uppercase">{data.voltage !== undefined ? data.voltage + ' V' : '0 V'}</div>
+            <Handle type="source" position={Position.Right} id="out" />
+        </div>
+    );
+});
+
+// Rheostat Node
+export const RheostatNode = memo(({ data }) => {
+    const [resistance, setResistance] = React.useState(data.resistance !== undefined ? data.resistance : 500);
+
+    const handleChange = (e) => {
+        const val = parseInt(e.target.value, 10);
+        const finalVal = isNaN(val) ? 0 : val;
+        setResistance(finalVal);
+        data.onChange && data.onChange({ resistance: finalVal });
+    };
+
+    return (
+        <div className={nodeStyles}>
+            <Handle type="target" position={Position.Left} id="in" />
+            <div className="text-xl font-bold tracking-widest text-orange-600">⦚</div>
+            <input
+                type="range"
+                min="0"
+                max="1000"
+                value={resistance}
+                onChange={handleChange}
+                className="nodrag w-16 mt-1"
+                title="Resistance in Ohms"
+            />
+            <div className="text-[10px] text-gray-500 font-bold uppercase">{resistance} Ω</div>
+            <Handle type="source" position={Position.Right} id="out" />
+        </div>
+    );
+});
