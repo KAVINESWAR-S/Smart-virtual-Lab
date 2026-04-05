@@ -405,10 +405,10 @@ const TeacherDashboard = () => {
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                     <div>
-                                        <label className="block text-sm font-bold mb-2 text-pink-400 drop-shadow-[0_0_8px_rgba(236,72,153,0.8)]">Due Date (optional)</label>
+                                        <label className="block text-sm font-bold mb-2 text-slate-300">Due Date (optional)</label>
                                         <input
                                             type="datetime-local"
-                                            className="w-full bg-slate-950 border-2 border-purple-500 focus:border-pink-500 text-pink-300 p-3 rounded-lg font-bold shadow-[0_0_15px_rgba(168,85,247,0.4)] focus:shadow-[0_0_20px_rgba(236,72,153,0.6)] outline-none transition-all"
+                                            className="glass-input w-full"
                                             style={{ colorScheme: "dark" }}
                                             value={newClassroom.dueAt}
                                             onChange={(e) => setNewClassroom({ ...newClassroom, dueAt: e.target.value })}

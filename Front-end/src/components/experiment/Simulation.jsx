@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Simulator from "./Simulator/Simulator";
 import { useAuth } from "../../context/AuthContext";
 import toast from 'react-hot-toast';
@@ -7,6 +7,7 @@ import { api, authHeaders } from '../../api/client';
 const Simulation = ({ experiment }) => {
     const { user } = useAuth();
     const [submission, setSubmission] = useState(null);
+    const simulatorRef = useRef(null);
 
     useEffect(() => {
         if (user && user.role === 'student' && experiment) {
@@ -38,19 +39,13 @@ const Simulation = ({ experiment }) => {
     };
 
     const handleSubmit = async (circuitData) => {
-        // If it's a manual click (event object exists? no, Simulator sends data directly).
-        // We can infer it's auto-submit if we want, or just ask. 
-        // BUT, if it's auto-submit from timer, we shouldn't block with window.confirm.
-        // However, the Simulator calls onSubmit directly.
-        // Let's assume for now we always confirm UNLESS it's the last second?
-        // Actually, better to remove the confirm for now or pass a flag.
-        // For simplicity in this edit: We will remove the confirm dialog as the timer presence makes it time-sensitive.
-        // Alternatively, we can assume if data is passed it's a conscious submit action.
-
-        // window.confirm removed to allow auto-submission from timer without blocking.
-        // The user knows they are submitting.
-
         try {
+            // Capture circuit screenshot before submitting
+            let screenshot = null;
+            if (simulatorRef.current?.getScreenshot) {
+                screenshot = await simulatorRef.current.getScreenshot();
+            }
+
             const config = {
                 headers: {
                     'Content-Type': 'application/json',
@@ -61,7 +56,7 @@ const Simulation = ({ experiment }) => {
             const payload = {
                 classroomId: experiment.id,
                 experimentTitle: experiment.title,
-                circuitData: circuitData
+                circuitData: { ...circuitData, screenshot }
             };
 
             const { data } = await api.post('/api/submissions', payload, config);
@@ -124,6 +119,7 @@ const Simulation = ({ experiment }) => {
                 </div>
             ) : (
                 <Simulator
+                    ref={simulatorRef}
                     onSubmit={user?.role === 'student' ? handleSubmit : null}
                     timeLimit={30 * 60} // 30 minutes
                 />

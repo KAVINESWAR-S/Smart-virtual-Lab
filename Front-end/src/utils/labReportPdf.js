@@ -9,7 +9,7 @@ function formatDateTime(d) {
     }
 }
 
-export function generateLabReportPdf({ experiment, student, submission }) {
+export function generateLabReportPdf({ experiment, student, submission, circuitImage }) {
     const doc = new jsPDF();
 
     const title = `Lab Report: ${experiment?.title || 'Experiment'}`;
@@ -27,13 +27,14 @@ export function generateLabReportPdf({ experiment, student, submission }) {
             ['Experiment code', experiment?.code || '—'],
             ['Aim', experiment?.aim || '—'],
             ['Quiz score', submission?.quizScore != null ? `${submission.quizScore}/${experiment?.quiz?.length || '—'}` : '—'],
+            ['Auto grade (simulation)', submission?.simulationScore != null ? `${submission.simulationScore}/10` : '—'],
             ['Manual grade', submission?.grade != null ? `${submission.grade}/10` : '—'],
             ['Attempts used', submission?.attemptsUsed != null ? String(submission.attemptsUsed) : '—'],
             ['Submitted at', submission?.submittedAt ? formatDateTime(submission.submittedAt) : '—'],
         ],
         theme: 'grid',
         styles: { fontSize: 9 },
-        headStyles: { fillColor: [30, 41, 59] }, // slate-ish
+        headStyles: { fillColor: [30, 41, 59] },
     });
 
     const afterSummaryY = doc.lastAutoTable?.finalY || 38;
@@ -76,6 +77,20 @@ export function generateLabReportPdf({ experiment, student, submission }) {
         headStyles: { fillColor: [30, 41, 59] },
     });
 
+    // Circuit Diagram Image
+    const imgData = circuitImage || submission?.circuitData?.screenshot;
+    if (imgData) {
+        doc.addPage();
+        doc.setFontSize(14);
+        doc.text('Circuit Diagram', 14, 18);
+
+        // Fit image to page width with aspect ratio
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const imgWidth = pageWidth - 28; // 14px margin each side
+        const imgHeight = imgWidth * 0.55; // approximate 16:9-ish ratio
+
+        doc.addImage(imgData, 'PNG', 14, 26, imgWidth, imgHeight);
+    }
+
     return doc;
 }
-

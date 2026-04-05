@@ -6,6 +6,7 @@ import React, {
     forwardRef,
     useImperativeHandle,
 } from 'react';
+import { toPng } from 'html-to-image';
 import {
     ReactFlow,
     ReactFlowProvider,
@@ -121,8 +122,23 @@ const Simulator = forwardRef(
                 setNodes([]);
                 setEdges([]);
             },
+            getScreenshot: async () => {
+                const el = reactFlowWrapper.current;
+                if (!el) return null;
+                try {
+                    const dataUrl = await toPng(el, {
+                        backgroundColor: '#0f172a',
+                        quality: 0.92,
+                        pixelRatio: 2,
+                    });
+                    return dataUrl;
+                } catch (err) {
+                    console.error('Screenshot failed:', err);
+                    return null;
+                }
+            },
         }),
-        [edges, hydrateNodes, nodes, setEdges, setNodes]
+        [edges, hydrateNodes, nodes, setEdges, setNodes, reactFlowWrapper]
     );
 
     // Timer Logic

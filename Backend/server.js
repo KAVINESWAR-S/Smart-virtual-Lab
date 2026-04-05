@@ -7,7 +7,7 @@ const app = express();
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
 
 // MongoDB Connection
 // Fix for querySrv ETIMEOUT: Use Google and Cloudflare DNS to bypass local ISP DNS issues
