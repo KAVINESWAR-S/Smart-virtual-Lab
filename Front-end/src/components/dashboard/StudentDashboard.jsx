@@ -136,51 +136,85 @@ const StudentDashboard = () => {
                                 <FaFlask className="text-cyan-400" /> Active Experiments
                             </h2>
 
-                            {loading ? (
-                                <div className="text-center p-8 text-slate-400">Loading experiments...</div>
-                            ) : classrooms.filter(room => !mySubmissions.some(sub =>
-                                (sub.classroom?._id === room._id || sub.classroom === room._id) ||
-                                sub.experimentTitle === room.name
-                            )).length === 0 ? (
-                                <motion.div
-                                    variants={itemVariants}
-                                    className="glass-panel p-8 text-center text-slate-300 italic border border-slate-700/50"
-                                >
-                                    No active experiments available. You have completed all assigned tasks!
-                                </motion.div>
-                            ) : (
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    {classrooms.filter(room => !mySubmissions.some(sub =>
-                                        (sub.classroom?._id === room._id || sub.classroom === room._id) ||
-                                        sub.experimentTitle === room.name
-                                    )).map(room => (
-                                        <motion.div
-                                            key={room._id}
-                                            variants={itemVariants}
-                                            className="glass-panel p-5 hover:border-blue-500/50 transition-colors group relative overflow-hidden"
-                                        >
-                                            <div className="absolute top-0 right-0 p-2 opacity-10 group-hover:opacity-20 transition-opacity">
-                                                <FaFlask size={60} />
-                                            </div>
-                                            <h3 className="font-bold text-xl mb-1 text-white group-hover:text-blue-300 transition-colors">{room.name}</h3>
-                                            <p className="text-slate-400 text-sm mb-4">Code: <span className="font-mono text-slate-300">{room.code}</span></p>
-                                            {(room.dueAt || room.attemptLimit) && (
-                                                <div className="text-xs text-slate-400 mb-4 space-y-1">
-                                                    {room.dueAt && <div>Due: <span className="text-slate-200">{new Date(room.dueAt).toLocaleString()}</span></div>}
-                                                    {room.attemptLimit && <div>Attempts: <span className="text-slate-200">{room.attemptLimit}</span></div>}
-                                                </div>
-                                            )}
+                            {(() => {
+                                // Helper: determine if an experiment is still active
+                                const isExperimentActive = (room) => {
+                                    const sub = mySubmissions.find(s =>
+                                        (s.classroom?._id === room._id || s.classroom === room._id) ||
+                                        s.experimentTitle === room.name
+                                    );
+                                    // No submission yet → active
+                                    if (!sub) return true;
+                                    // Has an attempt limit → active as long as attempts remain
+                                    if (room.attemptLimit) {
+                                        return (sub.attemptsUsed || 0) < room.attemptLimit;
+                                    }
+                                    // No attempt limit and already submitted → completed
+                                    return false;
+                                };
 
-                                            <Link
-                                                to={`/experiment/${room._id}`}
-                                                className="inline-block w-full text-center py-2 rounded bg-blue-600/20 hover:bg-blue-600 text-blue-300 hover:text-white transition-all border border-blue-500/30"
-                                            >
-                                                Start Experiment &rarr;
-                                            </Link>
+                                const activeRooms = classrooms.filter(isExperimentActive);
+
+                                if (loading) {
+                                    return <div className="text-center p-8 text-slate-400">Loading experiments...</div>;
+                                }
+
+                                if (activeRooms.length === 0) {
+                                    return (
+                                        <motion.div
+                                            variants={itemVariants}
+                                            className="glass-panel p-8 text-center text-slate-300 italic border border-slate-700/50"
+                                        >
+                                            No active experiments available. You have completed all assigned tasks!
                                         </motion.div>
-                                    ))}
-                                </div>
-                            )}
+                                    );
+                                }
+
+                                return (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        {activeRooms.map(room => {
+                                            const sub = mySubmissions.find(s =>
+                                                (s.classroom?._id === room._id || s.classroom === room._id) ||
+                                                s.experimentTitle === room.name
+                                            );
+                                            const attemptsUsed = sub?.attemptsUsed || 0;
+                                            const hasAttemptLimit = !!room.attemptLimit;
+                                            const attemptsRemaining = hasAttemptLimit ? room.attemptLimit - attemptsUsed : null;
+
+                                            return (
+                                                <motion.div
+                                                    key={room._id}
+                                                    variants={itemVariants}
+                                                    className="glass-panel p-5 hover:border-blue-500/50 transition-colors group relative overflow-hidden"
+                                                >
+                                                    <div className="absolute top-0 right-0 p-2 opacity-10 group-hover:opacity-20 transition-opacity">
+                                                        <FaFlask size={60} />
+                                                    </div>
+                                                    <h3 className="font-bold text-xl mb-1 text-white group-hover:text-blue-300 transition-colors">{room.name}</h3>
+                                                    <p className="text-slate-400 text-sm mb-4">Code: <span className="font-mono text-slate-300">{room.code}</span></p>
+                                                    {(room.dueAt || hasAttemptLimit) && (
+                                                        <div className="text-xs text-slate-400 mb-4 space-y-1">
+                                                            {room.dueAt && <div>Due: <span className="text-slate-200">{new Date(room.dueAt).toLocaleString()}</span></div>}
+                                                            {hasAttemptLimit && (
+                                                                <div>Attempts: <span className="text-slate-200">{attemptsUsed}/{room.attemptLimit}</span>
+                                                                    <span className="ml-2 text-blue-400">({attemptsRemaining} remaining)</span>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    )}
+
+                                                    <Link
+                                                        to={`/experiment/${room._id}`}
+                                                        className="inline-block w-full text-center py-2 rounded bg-blue-600/20 hover:bg-blue-600 text-blue-300 hover:text-white transition-all border border-blue-500/30"
+                                                    >
+                                                        {attemptsUsed > 0 ? 'Continue Experiment →' : 'Start Experiment →'}
+                                                    </Link>
+                                                </motion.div>
+                                            );
+                                        })}
+                                    </div>
+                                );
+                            })()}
                         </motion.section>
 
                         {/* Recent Activity / Submissions */}
