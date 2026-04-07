@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { protect, teacherOnly } = require('../middleware/authMiddleware.js');
 const Classroom = require('../models/Classroom.js');
+const Submission = require('../models/Submission.js');
 const User = require('../models/User.js');
 const multer = require('multer');
 const pdfParse = require('pdf-parse');
@@ -149,6 +150,40 @@ router.get('/:id', protect, async (req, res) => {
         }
 
         res.json(classroom);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+});
+
+// @desc    Delete a classroom (Experiment)
+// @route   DELETE /api/classrooms/:id
+// @access  Teacher only (must be the creator)
+router.delete('/:id', protect, teacherOnly, async (req, res) => {
+    try {
+        const classroom = await Classroom.findById(req.params.id);
+
+        if (!classroom) {
+            return res.status(404).json({ message: 'Classroom not found' });
+        }
+
+        // Verify the teacher owns this experiment
+        if (!classroom.teacher.equals(req.user._id)) {
+            return res.status(403).json({ message: 'Not authorized to delete this experiment' });
+        }
+
+        // Delete all submissions associated with this classroom
+        await Submission.deleteMany({ classroom: classroom._id });
+
+        // Remove this classroom from all students' classroomsJoined arrays
+        await User.updateMany(
+            { classroomsJoined: classroom._id },
+            { $pull: { classroomsJoined: classroom._id } }
+        );
+
+        // Delete the classroom
+        await Classroom.findByIdAndDelete(req.params.id);
+
+        res.json({ message: 'Experiment deleted successfully' });
     } catch (error) {
         res.status(500).json({ message: error.message });
     }

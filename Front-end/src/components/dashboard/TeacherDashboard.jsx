@@ -38,6 +38,10 @@ const TeacherDashboard = () => {
     const [gradeInput, setGradeInput] = useState('');
     const [feedbackInput, setFeedbackInput] = useState('');
 
+    // Delete Experiment State
+    const [deleteTarget, setDeleteTarget] = useState(null);
+    const [isDeleting, setIsDeleting] = useState(false);
+
     useEffect(() => {
         fetchClassrooms();
     }, []);
@@ -187,6 +191,24 @@ const TeacherDashboard = () => {
         }
     };
 
+    // --- Delete Handler ---
+    const handleDeleteExperiment = async () => {
+        if (!deleteTarget) return;
+        setIsDeleting(true);
+        try {
+            const config = { headers: authHeaders(user.token) };
+            await api.delete(`/api/classrooms/${deleteTarget._id}`, config);
+            toast.success(`"${deleteTarget.name}" deleted successfully`);
+            setDeleteTarget(null);
+            fetchClassrooms();
+        } catch (error) {
+            console.error(error);
+            toast.error(error.response?.data?.message || 'Failed to delete experiment');
+        } finally {
+            setIsDeleting(false);
+        }
+    };
+
     // --- View/Grade Handlers ---
     const viewClassroom = async (id) => {
         try {
@@ -331,9 +353,18 @@ const TeacherDashboard = () => {
                                             <div className="p-3 bg-purple-500/10 rounded-lg text-purple-400">
                                                 <FaChalkboard size={24} />
                                             </div>
-                                            <span className="px-3 py-1 bg-slate-800 rounded-full text-xs font-mono border border-slate-700">
-                                                {room.code}
-                                            </span>
+                                            <div className="flex items-center gap-2">
+                                                <span className="px-3 py-1 bg-slate-800 rounded-full text-xs font-mono border border-slate-700">
+                                                    {room.code}
+                                                </span>
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); setDeleteTarget(room); }}
+                                                    className="p-2 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-all opacity-0 group-hover:opacity-100"
+                                                    title="Delete Experiment"
+                                                >
+                                                    <FaTrash size={14} />
+                                                </button>
+                                            </div>
                                         </div>
                                         <h3 className="font-bold text-xl mb-2 group-hover:text-purple-300 transition-colors">{room.name}</h3>
                                         <div className="flex items-center text-slate-400 text-sm mb-6 gap-2">
@@ -693,6 +724,61 @@ const TeacherDashboard = () => {
                         </div>
                     </motion.div>
                 )}
+
+                {/* Delete Confirmation Modal */}
+                <AnimatePresence>
+                    {deleteTarget && (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="fixed inset-0 bg-slate-950/90 backdrop-blur-sm flex justify-center items-center z-[100] p-4"
+                            onClick={() => !isDeleting && setDeleteTarget(null)}
+                        >
+                            <motion.div
+                                initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                                animate={{ opacity: 1, scale: 1, y: 0 }}
+                                exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                                className="bg-slate-900 w-full max-w-md p-8 rounded-2xl shadow-2xl border border-red-500/30"
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                <div className="text-center mb-6">
+                                    <div className="w-16 h-16 bg-red-500/20 text-red-400 rounded-full flex items-center justify-center mx-auto mb-4">
+                                        <FaTrash size={28} />
+                                    </div>
+                                    <h2 className="text-2xl font-bold text-white mb-2">Delete Experiment?</h2>
+                                    <p className="text-slate-400 text-sm">
+                                        You are about to permanently delete <span className="text-white font-semibold">"{deleteTarget.name}"</span>.
+                                        This will also remove all student submissions for this experiment.
+                                    </p>
+                                </div>
+                                <div className="flex gap-3">
+                                    <button
+                                        onClick={() => setDeleteTarget(null)}
+                                        disabled={isDeleting}
+                                        className="flex-1 py-3 px-4 rounded-xl border border-slate-700 text-slate-300 hover:bg-slate-800 transition-all font-medium disabled:opacity-50"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        onClick={handleDeleteExperiment}
+                                        disabled={isDeleting}
+                                        className="flex-1 py-3 px-4 rounded-xl bg-red-600 hover:bg-red-700 text-white font-medium transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                                    >
+                                        {isDeleting ? (
+                                            <>
+                                                <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                                                Deleting...
+                                            </>
+                                        ) : (
+                                            <><FaTrash size={14} /> Delete</>
+                                        )}
+                                    </button>
+                                </div>
+                            </motion.div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
 
                 {/* First Login Forced Modal */}
                 {showFirstLoginModal && (
